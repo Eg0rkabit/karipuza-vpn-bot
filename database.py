@@ -9,6 +9,13 @@ def connect() -> sqlite3.Connection:
     return sqlite3.connect(DB_PATH)
 
 
+def ensure_column(cur: sqlite3.Cursor, table: str, column: str, definition: str) -> None:
+    cur.execute(f"PRAGMA table_info({table})")
+    columns = {row[1] for row in cur.fetchall()}
+    if column not in columns:
+        cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_db() -> None:
     conn = connect()
     cur = conn.cursor()
@@ -25,6 +32,14 @@ def init_db() -> None:
         updated_at INTEGER NOT NULL
     )
     """)
+
+    ensure_column(cur, "users", "tg_username", "TEXT")
+    ensure_column(cur, "users", "marzban_username", "TEXT")
+    ensure_column(cur, "users", "expire_at", "INTEGER DEFAULT 0")
+    ensure_column(cur, "users", "vpn_link", "TEXT")
+    ensure_column(cur, "users", "trial_used", "INTEGER DEFAULT 0")
+    ensure_column(cur, "users", "created_at", "INTEGER DEFAULT 0")
+    ensure_column(cur, "users", "updated_at", "INTEGER DEFAULT 0")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS purchases (
