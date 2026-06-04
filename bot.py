@@ -1,6 +1,7 @@
 import asyncio
 import html
 import logging
+import time
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F
@@ -44,6 +45,14 @@ from texts import (
 
 logging.basicConfig(level=logging.INFO)
 
+ACTION_COOLDOWN_SECONDS = 0.8
+HEAVY_ACTION_COOLDOWN_SECONDS = 4.0
+GENERIC_ERROR_TEXT = "❌ Ошибка, обратитесь к админу."
+
+user_action_at: dict[int, float] = {}
+heavy_action_at: dict[int, float] = {}
+active_key_requests: set[int] = set()
+
 bot = Bot(
     token=settings.bot_token,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -76,6 +85,77 @@ def parse_callback_parts(data: str, expected: int) -> list[str]:
     if len(parts) < expected:
         raise ValueError("Некорректные данные кнопки")
     return parts
+
+
+def is_rate_limited(
+    user_id: int,
+    cooldown: float = ACTION_COOLDOWN_SECONDS,
+    bucket: dict[int, float] | None = None,
+) -> bool:
+    if bucket is None:
+        bucket = user_action_at
+
+    now = time.monotonic()
+    last_action_at = bucket.get(user_id, 0)
+    if now - last_action_at < cooldown:
+        return True
+
+    bucket[user_id] = now
+    return False
+
+
+async def answer_if_rate_limited(
+    callback: CallbackQuery,
+    cooldown: float = ACTION_COOLDOWN_SECONDS,
+    *,
+    heavy: bool = False,
+) -> bool:
+    bucket = heavy_action_at if heavy else user_action_at
+    if not is_rate_limited(callback.from_user.id, cooldown, bucket):
+        return False
+
+    await callback.answer("Подождите пару секунд.", show_alert=False)
+    return True
+
+
+async def message_is_rate_limited(message: Message, cooldown: float = ACTION_COOLDOWN_SECONDS) -> bool:
+    return is_rate_limited(message.from_user.id, cooldown)
+
+
+def short_error_text(error: Exception, limit: int = 2500) -> str:
+    text = str(error) or error.__class__.__name__
+    if len(text) > limit:
+        text = text[:limit] + "..."
+    return html.escape(text)
+
+
+async def notify_admins_about_error(
+    error: Exception,
+    *,
+    action: str,
+    tg_id: int | None = None,
+    username: str | None = None,
+) -> None:
+    user_line = ""
+    if tg_id is not None:
+        user_line = (
+            f"\nПользователь: {display_user(username, tg_id)}\n"
+            f"Telegram ID: <code>{tg_id}</code>\n"
+        )
+
+    text = (
+        "⚠️ <b>Ошибка в боте</b>\n\n"
+        f"Действие: <b>{html.escape(action)}</b>"
+        f"{user_line}\n"
+        f"Тип: <code>{html.escape(error.__class__.__name__)}</code>\n"
+        f"Ошибка:\n<code>{short_error_text(error)}</code>"
+    )
+
+    for admin_id in settings.admin_ids:
+        try:
+            await bot.send_message(admin_id, text)
+        except Exception:
+            logging.exception("Failed to notify admin %s about error", admin_id)
 
 
 async def edit_or_answer(message: Message, text: str, reply_markup=None) -> None:
@@ -340,6 +420,9 @@ async def admin_issue_user_callback(callback: CallbackQuery):
 
 @dp.message(F.text == BTN_BUY)
 async def buy_message_handler(message: Message):
+    if await message_is_rate_limited(message):
+        return
+
     db.ensure_user(message.from_user.id, message.from_user.username)
 
     trial_available = not db.has_used_trial(message.from_user.id)
@@ -351,6 +434,9 @@ async def buy_message_handler(message: Message):
 
 @dp.message(F.text == BTN_MY_KEY)
 async def my_key_message_handler(message: Message):
+    if await message_is_rate_limited(message):
+        return
+
     db.ensure_user(message.from_user.id, message.from_user.username)
 
     user = db.get_user(message.from_user.id)
@@ -360,8 +446,14 @@ async def my_key_message_handler(message: Message):
                 message.from_user.id,
                 message.from_user.username,
             )
-        except MarzbanError:
+        except MarzbanError as e:
             logging.exception("Failed to sync user %s from Marzban", message.from_user.id)
+            await notify_admins_about_error(
+                e,
+                action="Синхронизация ключа через кнопку Мой ключ",
+                tg_id=message.from_user.id,
+                username=message.from_user.username,
+            )
             synced = False
 
         if synced:
@@ -389,11 +481,17 @@ async def my_key_message_handler(message: Message):
 
 @dp.message(F.text == BTN_INSTRUCTION)
 async def instruction_message_handler(message: Message):
+    if await message_is_rate_limited(message):
+        return
+
     await message.answer(INSTRUCTION_TEXT, reply_markup=main_keyboard_for(message.from_user.id))
 
 
 @dp.message(F.text == BTN_SUPPORT)
 async def support_message_handler(message: Message):
+    if await message_is_rate_limited(message):
+        return
+
     await message.answer(
         "💬 Поддержка Karipuza VPN:",
         reply_markup=support_inline_keyboard(),
@@ -402,18 +500,27 @@ async def support_message_handler(message: Message):
 
 @dp.callback_query(F.data == "back_main")
 async def back_main_callback(callback: CallbackQuery):
+    if await answer_if_rate_limited(callback):
+        return
+
     await callback.message.answer(WELCOME_TEXT, reply_markup=main_keyboard_for(callback.from_user.id))
     await callback.answer()
 
 
 @dp.callback_query(F.data == "instruction")
 async def instruction_callback(callback: CallbackQuery):
+    if await answer_if_rate_limited(callback):
+        return
+
     await callback.message.answer(INSTRUCTION_TEXT, reply_markup=main_keyboard_for(callback.from_user.id))
     await callback.answer()
 
 
 @dp.callback_query(F.data == "show_key")
 async def show_key_callback(callback: CallbackQuery):
+    if await answer_if_rate_limited(callback):
+        return
+
     db.ensure_user(callback.from_user.id, callback.from_user.username)
 
     user = db.get_user(callback.from_user.id)
@@ -423,8 +530,14 @@ async def show_key_callback(callback: CallbackQuery):
                 callback.from_user.id,
                 callback.from_user.username,
             )
-        except MarzbanError:
+        except MarzbanError as e:
             logging.exception("Failed to sync user %s from Marzban", callback.from_user.id)
+            await notify_admins_about_error(
+                e,
+                action="Синхронизация ключа через кнопку Показать ключ",
+                tg_id=callback.from_user.id,
+                username=callback.from_user.username,
+            )
             synced = False
 
         if synced:
@@ -446,6 +559,13 @@ async def show_key_callback(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("tariff:"))
 async def tariff_callback(callback: CallbackQuery):
+    if callback.from_user.id in active_key_requests:
+        await callback.answer("Ключ уже создаётся, подождите.", show_alert=True)
+        return
+
+    if await answer_if_rate_limited(callback, HEAVY_ACTION_COOLDOWN_SECONDS, heavy=True):
+        return
+
     db.ensure_user(callback.from_user.id, callback.from_user.username)
 
     tariff_id = callback.data.split(":", 1)[1]
@@ -465,10 +585,11 @@ async def tariff_callback(callback: CallbackQuery):
         )
         return
 
-    await callback.answer("Создаю ключ...")
-    await callback.message.answer("⏳ Создаю ваш VPN-ключ...")
-
+    active_key_requests.add(callback.from_user.id)
     try:
+        await callback.answer("Создаю ключ...")
+        await callback.message.answer("⏳ Создаю ваш VPN-ключ...")
+
         marzban_username, expire_at, vpn_link = await create_or_update_user(
             tg_id=callback.from_user.id,
             days=int(tariff["days"]),
@@ -515,22 +636,30 @@ async def tariff_callback(callback: CallbackQuery):
                 logging.exception("Failed to send admin notification to %s", admin_id)
 
     except MarzbanError as e:
+        await notify_admins_about_error(
+            e,
+            action=f"Создание VPN-ключа, тариф {tariff['title']}",
+            tg_id=callback.from_user.id,
+            username=callback.from_user.username,
+        )
         await callback.message.answer(
-            "❌ Не получилось создать ключ через Marzban.\n\n"
-            f"<code>{e}</code>\n\n"
-            "Проверьте:\n"
-            "1. Marzban запущен.\n"
-            "2. Логин и пароль Marzban верные.\n"
-            "3. MARZBAN_INBOUND_TAG совпадает с inbound в Marzban.\n"
-            "4. На сервере доступен http://127.0.0.1:8000.",
+            GENERIC_ERROR_TEXT,
             reply_markup=main_keyboard_for(callback.from_user.id),
         )
     except Exception as e:
         logging.exception("Unknown error while creating VPN key")
+        await notify_admins_about_error(
+            e,
+            action=f"Неизвестная ошибка при создании VPN-ключа, тариф {tariff['title']}",
+            tg_id=callback.from_user.id,
+            username=callback.from_user.username,
+        )
         await callback.message.answer(
-            f"❌ Неизвестная ошибка:\n<code>{e}</code>",
+            GENERIC_ERROR_TEXT,
             reply_markup=main_keyboard_for(callback.from_user.id),
         )
+    finally:
+        active_key_requests.discard(callback.from_user.id)
 
 
 @dp.callback_query(F.data.startswith("disable_user:"))

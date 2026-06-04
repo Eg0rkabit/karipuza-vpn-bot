@@ -54,4 +54,18 @@ TARIFFS = {
         "data_limit_gb": 0,
         "is_trial": False,
     },
+    "month_6": {
+        "title": "⭐ 6 месяцев",
+        "days": 180,
+        "price": "1499 ₽",
+        "data_limit_gb": 0,
+        "is_trial": False,
+    },
+    "year_1": {
+        "title": "👑 1 год",
+        "days": 365,
+        "price": "2799 ₽",
+        "data_limit_gb": 0,
+        "is_trial": False,
+    },
 }

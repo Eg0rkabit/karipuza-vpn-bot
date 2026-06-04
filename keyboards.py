@@ -122,6 +122,10 @@ def admin_user_manage_keyboard(tg_id: int, page: int = 0) -> InlineKeyboardMarku
         ],
         [
             InlineKeyboardButton(text="🔥 90 дней", callback_data=f"admin:issue:{tg_id}:month_3:{page}"),
+            InlineKeyboardButton(text="⭐ 180 дней", callback_data=f"admin:issue:{tg_id}:month_6:{page}"),
+        ],
+        [
+            InlineKeyboardButton(text="👑 365 дней", callback_data=f"admin:issue:{tg_id}:year_1:{page}"),
         ],
         [InlineKeyboardButton(text="← К списку", callback_data=f"admin:users:{page}")],
     ])
