@@ -47,14 +47,16 @@ def tariffs_inline_keyboard(trial_available: bool) -> InlineKeyboardMarkup:
 
 
 def key_inline_keyboard(vpn_link: str) -> InlineKeyboardMarkup:
-    if len(vpn_link) <= COPY_TEXT_MAX_LENGTH:
+    has_multiple_links = "\n" in vpn_link
+
+    if not has_multiple_links and len(vpn_link) <= COPY_TEXT_MAX_LENGTH:
         key_button = InlineKeyboardButton(
             text="📋 Скопировать ключ",
             copy_text=CopyTextButton(text=vpn_link),
         )
     else:
         key_button = InlineKeyboardButton(
-            text="📄 Показать ключ",
+            text="📄 Показать ключи" if has_multiple_links else "📄 Показать ключ",
             callback_data="show_key",
         )
 

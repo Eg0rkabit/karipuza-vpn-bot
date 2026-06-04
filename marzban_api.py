@@ -63,7 +63,9 @@ def fix_vless_host(link: str) -> str:
 def extract_link(user_data: dict) -> str:
     links = user_data.get("links") or []
     if links:
-        return fix_vless_host(str(links[0]))
+        fixed_links = [fix_vless_host(str(link)) for link in links if str(link).strip()]
+        if fixed_links:
+            return "\n".join(fixed_links)
 
     subscription_url = user_data.get("subscription_url")
     if subscription_url:
@@ -153,7 +155,7 @@ async def create_or_update_user(tg_id: int, days: int, data_limit_gb: int = 0) -
             "vless": {}
         },
         "inbounds": {
-            "vless": [settings.marzban_inbound_tag]
+            "vless": settings.marzban_inbound_tags
         },
         "expire": expire_at,
         "data_limit": data_limit,
