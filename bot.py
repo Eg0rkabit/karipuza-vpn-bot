@@ -18,7 +18,13 @@ from keyboards import (
     support_inline_keyboard,
     tariffs_inline_keyboard,
 )
-from marzban_api import MarzbanError, create_or_update_user, disable_user
+from marzban_api import (
+    MarzbanError,
+    create_or_update_user,
+    disable_user,
+    enable_user as enable_marzban_user,
+    get_active_user,
+)
 from texts import (
     BTN_BUY,
     BTN_INSTRUCTION,
@@ -52,6 +58,23 @@ def display_user(username: str | None, tg_id: int) -> str:
     if username:
         return f"@{username}"
     return f"ID {tg_id}"
+
+
+async def sync_active_user_from_marzban(tg_id: int, tg_username: str | None) -> bool:
+    active_user = await get_active_user(tg_id)
+    if not active_user:
+        return False
+
+    marzban_username, expire_at, vpn_link = active_user
+    db.save_vpn_user(
+        tg_id=tg_id,
+        tg_username=tg_username,
+        marzban_username=marzban_username,
+        expire_at=expire_at,
+        vpn_link=vpn_link,
+        mark_trial_used=False,
+    )
+    return True
 
 
 async def send_main_menu(message: Message) -> None:
@@ -106,9 +129,23 @@ async def my_key_message_handler(message: Message):
 
     user = db.get_user(message.from_user.id)
     if not user or not user[4]:
+        try:
+            synced = await sync_active_user_from_marzban(
+                message.from_user.id,
+                message.from_user.username,
+            )
+        except MarzbanError:
+            logging.exception("Failed to sync user %s from Marzban", message.from_user.id)
+            synced = False
+
+        if synced:
+            user = db.get_user(message.from_user.id)
+
+    if not user or not user[4]:
         await message.answer(
             "У вас пока нет активного VPN-ключа.\n\n"
-            "Нажмите «🚀 Купить VPN», чтобы получить доступ.",
+            "Нажмите «🚀 Купить VPN», чтобы получить доступ. "
+            "Если админ уже включил ключ вручную, попробуйте ещё раз через минуту.",
             reply_markup=main_reply_keyboard(),
         )
         return
@@ -154,6 +191,19 @@ async def show_key_callback(callback: CallbackQuery):
     db.ensure_user(callback.from_user.id, callback.from_user.username)
 
     user = db.get_user(callback.from_user.id)
+    if not user or not user[4]:
+        try:
+            synced = await sync_active_user_from_marzban(
+                callback.from_user.id,
+                callback.from_user.username,
+            )
+        except MarzbanError:
+            logging.exception("Failed to sync user %s from Marzban", callback.from_user.id)
+            synced = False
+
+        if synced:
+            user = db.get_user(callback.from_user.id)
+
     if not user or not user[4]:
         await callback.answer("Активный ключ не найден.", show_alert=True)
         return
@@ -268,10 +318,44 @@ async def disable_user_callback(callback: CallbackQuery):
     try:
         await disable_user(tg_id)
         db.clear_user_key(tg_id)
-        await callback.message.answer(f"⛔ Доступ пользователя <code>{tg_id}</code> отключён.")
+        await callback.message.answer(
+            f"⛔ Доступ пользователя <code>{tg_id}</code> отключён.",
+            reply_markup=admin_user_inline_keyboard(tg_id),
+        )
         await callback.answer("Отключено.")
     except Exception as e:
         await callback.message.answer(f"❌ Ошибка отключения:\n<code>{e}</code>")
+        await callback.answer("Ошибка.", show_alert=True)
+
+
+@dp.callback_query(F.data.startswith("enable_user:"))
+async def enable_user_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+
+    tg_id = int(callback.data.split(":", 1)[1])
+
+    try:
+        marzban_username, expire_at, vpn_link = await enable_marzban_user(tg_id)
+        user = db.get_user(tg_id)
+        tg_username = user[1] if user else None
+        db.save_vpn_user(
+            tg_id=tg_id,
+            tg_username=tg_username,
+            marzban_username=marzban_username,
+            expire_at=expire_at,
+            vpn_link=vpn_link,
+            mark_trial_used=False,
+        )
+        await callback.message.answer(
+            f"✅ Доступ пользователя <code>{tg_id}</code> включён.\n"
+            f"Активен до: <b>{format_date(expire_at)}</b>",
+            reply_markup=admin_user_inline_keyboard(tg_id),
+        )
+        await callback.answer("Включено.")
+    except Exception as e:
+        await callback.message.answer(f"❌ Ошибка включения:\n<code>{e}</code>")
         await callback.answer("Ошибка.", show_alert=True)
 
 

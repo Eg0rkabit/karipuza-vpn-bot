@@ -74,6 +74,73 @@ def extract_link(user_data: dict) -> str:
     )
 
 
+async def get_user_data(tg_id: int) -> dict | None:
+    token = await get_token()
+    marzban_username = f"tg_{tg_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.get(f"{settings.marzban_url}/api/user/{marzban_username}") as resp:
+            text = await resp.text()
+            if resp.status == 404:
+                return None
+            if resp.status != 200:
+                raise MarzbanError(f"Marzban get user error {resp.status}: {text}")
+
+            return await resp.json()
+
+
+def is_active_user(user_data: dict) -> bool:
+    status = str(user_data.get("status") or "").lower()
+    if status != "active":
+        return False
+
+    expire = int(user_data.get("expire") or 0)
+    return expire == 0 or expire > int(datetime.now(timezone.utc).timestamp())
+
+
+async def get_active_user(tg_id: int) -> tuple[str, int, str] | None:
+    user_data = await get_user_data(tg_id)
+    if not user_data or not is_active_user(user_data):
+        return None
+
+    username = str(user_data.get("username") or f"tg_{tg_id}")
+    expire_at = int(user_data.get("expire") or 0)
+    return username, expire_at, extract_link(user_data)
+
+
+async def enable_user(tg_id: int) -> tuple[str, int, str]:
+    token = await get_token()
+    marzban_username = f"tg_{tg_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.get(f"{settings.marzban_url}/api/user/{marzban_username}") as get_resp:
+            text = await get_resp.text()
+            if get_resp.status == 404:
+                raise MarzbanError(f"Пользователь {marzban_username} не найден в Marzban")
+            if get_resp.status != 200:
+                raise MarzbanError(f"Marzban get before enable error {get_resp.status}: {text}")
+            user_data = await get_resp.json()
+
+        user_data["status"] = "active"
+
+        async with session.put(f"{settings.marzban_url}/api/user/{marzban_username}", json=user_data) as resp:
+            text = await resp.text()
+            if resp.status not in (200, 201):
+                raise MarzbanError(f"Marzban enable error {resp.status}: {text}")
+
+        async with session.get(f"{settings.marzban_url}/api/user/{marzban_username}") as resp:
+            text = await resp.text()
+            if resp.status != 200:
+                raise MarzbanError(f"Marzban get after enable error {resp.status}: {text}")
+            enabled_user_data = await resp.json()
+
+    username = str(enabled_user_data.get("username") or marzban_username)
+    expire_at = int(enabled_user_data.get("expire") or 0)
+    return username, expire_at, extract_link(enabled_user_data)
+
+
 async def create_or_update_user(tg_id: int, days: int, data_limit_gb: int = 0) -> tuple[str, int, str]:
     token = await get_token()
     marzban_username = f"tg_{tg_id}"

@@ -63,6 +63,7 @@ def key_inline_keyboard(vpn_link: str) -> InlineKeyboardMarkup:
 def admin_user_inline_keyboard(tg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⛔ Отключить доступ", callback_data=f"disable_user:{tg_id}")],
+        [InlineKeyboardButton(text="✅ Включить доступ", callback_data=f"enable_user:{tg_id}")],
     ])
 
 
