@@ -15,8 +15,8 @@ def main_menu() -> InlineKeyboardMarkup:
     ])
 
 
-def tariffs_menu(trial_available: bool = True) -> InlineKeyboardMarkup:
-    rows = []
+def tariffs_menu(trial_available: bool) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
 
     for tariff_id, tariff in TARIFFS.items():
         if tariff.get("is_trial") and not trial_available:
@@ -33,7 +33,7 @@ def tariffs_menu(trial_available: bool = True) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def after_key_menu(vpn_link: str) -> InlineKeyboardMarkup:
+def key_menu(vpn_link: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
@@ -46,7 +46,7 @@ def after_key_menu(vpn_link: str) -> InlineKeyboardMarkup:
     ])
 
 
-def back_menu() -> InlineKeyboardMarkup:
+def back_to_main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="back_main")]
     ])
@@ -54,5 +54,5 @@ def back_menu() -> InlineKeyboardMarkup:
 
 def admin_user_menu(tg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⛔ Отключить пользователя", callback_data=f"disable_user:{tg_id}")],
+        [InlineKeyboardButton(text="⛔ Отключить доступ", callback_data=f"disable_user:{tg_id}")],
     ])

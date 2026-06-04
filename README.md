@@ -1,38 +1,27 @@
 # Karipuza VPN Bot
 
-Telegram-бот для выдачи VPN-ключей через Marzban.
+Рабочая версия Telegram-бота для Karipuza VPN + Marzban.
 
 ## Что умеет
 
-- `/start` и главное меню
-- Тестовый доступ на 1 день
-- Тест можно получить только один раз
-- Автоматическая выдача ключа без ручного одобрения
-- Кнопка копирования ключа
+- Главное меню
+- Купить VPN
+- Тест 1 день
+- Тест можно использовать только один раз
+- Автоматическая выдача ключа через Marzban без ручного одобрения
+- Кнопка копирования ключа без показа полного ключа в сообщении
 - Инструкция подключения
 - Админ-уведомление о выдаче доступа
 - Админ-кнопка отключения пользователя
-- Подготовлено для будущих оплат через ЮKassa / Robokassa
 
-## Файлы
+## Важно
 
-```text
-bot.py
-config.py
-database.py
-keyboards.py
-marzban_api.py
-texts.py
-requirements.txt
-.env.example
-.gitignore
-deploy.sh
-systemd/karipuza-bot.service
-```
+Кнопка копирования ключа использует Telegram `copy_text`.
+У пользователя должен быть актуальный Telegram-клиент.
 
-## Настройка .env
+## Настройка
 
-Скопируйте `.env.example` в `.env` и заполните:
+Создайте `.env` из `.env.example`:
 
 ```env
 BOT_TOKEN=токен_от_BotFather
@@ -47,7 +36,7 @@ PUBLIC_HOST=176.124.220.50
 SUPPORT_USERNAME=@your_username
 ```
 
-## Запуск на сервере
+## Запуск вручную
 
 ```bash
 cd /opt/karipuza-bot
@@ -57,20 +46,18 @@ pip install -r requirements.txt
 python3 bot.py
 ```
 
-## Обновление через Git
-
-На ПК:
+## Автозапуск
 
 ```bash
-git add .
-git commit -m "Update bot"
-git push
+cp systemd/karipuza-bot.service /etc/systemd/system/karipuza-bot.service
+systemctl daemon-reload
+systemctl enable karipuza-bot
+systemctl restart karipuza-bot
+systemctl status karipuza-bot
 ```
 
-На сервере:
+## Логи
 
 ```bash
-cd /opt/karipuza-bot
-git pull
-systemctl restart karipuza-bot
+journalctl -u karipuza-bot -f
 ```
