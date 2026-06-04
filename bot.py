@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 import database as db
 from config import settings
@@ -20,12 +20,39 @@ bot = Bot(
 dp = Dispatcher()
 
 
+# На старте MVP тестовый тариф делаем на 1 день.
+# Не трогаем texts.py, чтобы правка работала даже если тариф называется test_3/test/test_1.
+for _tariff_id, _tariff in TARIFFS.items():
+    if "test" in _tariff_id.lower() or "тест" in _tariff.get("title", "").lower():
+        _tariff["days"] = 1
+        _tariff["title"] = "🧪 Тест 1 день"
+
+
 def is_admin(user_id: int) -> bool:
     return user_id in settings.admin_ids
 
 
 def format_date(timestamp: int) -> str:
     return datetime.fromtimestamp(timestamp).strftime("%d.%m.%Y")
+
+
+def key_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Показать ключ для копирования", callback_data="show_key")],
+            [InlineKeyboardButton(text="📲 Инструкция", callback_data="instruction")],
+            [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="back_main")],
+        ]
+    )
+
+
+def key_copy_menu() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📲 Инструкция", callback_data="instruction")],
+            [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="back_main")],
+        ]
+    )
 
 
 @dp.message(CommandStart())
@@ -152,9 +179,8 @@ async def approve_handler(callback: CallbackQuery):
             f"✅ <b>Доступ активирован!</b>\n\n"
             f"Тариф: <b>{tariff['title']}</b>\n"
             f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
-            f"🔑 <b>Ваш VPN-ключ:</b>\n"
-            f"<code>{vpn_link}</code>\n\n"
-            f"📲 Нажмите «Инструкция», если не знаете как подключиться.",
+            f"🔑 Ключ готов. Нажмите кнопку ниже, чтобы открыть его для копирования.",
+            reply_markup=key_menu(),
         )
 
         await callback.message.edit_text(
@@ -212,16 +238,44 @@ async def my_key_handler(callback: CallbackQuery):
         await callback.answer()
         return
 
-    _, _, marzban_username, expire_at, vpn_link, _, _ = user
+    _, tg_username, _, expire_at, _, _, _ = user
+
+    username_text = f"@{tg_username}" if tg_username else "ваш аккаунт"
 
     await callback.message.edit_text(
-        f"🔑 <b>Ваш VPN-ключ</b>\n\n"
-        f"Профиль: <b>{marzban_username}</b>\n"
+        f"🔑 <b>Ваш VPN-доступ</b>\n\n"
+        f"Пользователь: <b>{username_text}</b>\n"
         f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
-        f"<code>{vpn_link}</code>",
-        reply_markup=main_menu(),
+        f"Нажмите кнопку ниже, чтобы скопировать ключ.",
+        reply_markup=key_menu(),
     )
     await callback.answer()
+
+
+@dp.callback_query(F.data == "show_key")
+async def show_key_handler(callback: CallbackQuery):
+    user = db.get_user(callback.from_user.id)
+
+    if not user:
+        await callback.message.edit_text(
+            "У вас пока нет активного VPN-ключа.\n\n"
+            "Нажмите «Купить VPN», чтобы получить доступ.",
+            reply_markup=main_menu(),
+        )
+        await callback.answer()
+        return
+
+    _, tg_username, _, expire_at, vpn_link, _, _ = user
+    username_text = f"@{tg_username}" if tg_username else "ваш аккаунт"
+
+    await callback.message.edit_text(
+        f"📋 <b>Нажмите на ключ ниже, чтобы скопировать:</b>\n\n"
+        f"<code>{vpn_link}</code>\n\n"
+        f"Пользователь: <b>{username_text}</b>\n"
+        f"Активен до: <b>{format_date(expire_at)}</b>",
+        reply_markup=key_copy_menu(),
+    )
+    await callback.answer("Нажмите на ключ в сообщении, чтобы скопировать")
 
 
 @dp.callback_query(F.data == "instruction")
