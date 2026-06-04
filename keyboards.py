@@ -9,6 +9,8 @@ from aiogram.types import (
 from config import settings
 from texts import BTN_BUY, BTN_INSTRUCTION, BTN_MENU, BTN_MY_KEY, BTN_SUPPORT, TARIFFS
 
+COPY_TEXT_MAX_LENGTH = 256
+
 
 def main_reply_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
@@ -40,13 +42,19 @@ def tariffs_inline_keyboard(trial_available: bool) -> InlineKeyboardMarkup:
 
 
 def key_inline_keyboard(vpn_link: str) -> InlineKeyboardMarkup:
+    if len(vpn_link) <= COPY_TEXT_MAX_LENGTH:
+        key_button = InlineKeyboardButton(
+            text="📋 Скопировать ключ",
+            copy_text=CopyTextButton(text=vpn_link),
+        )
+    else:
+        key_button = InlineKeyboardButton(
+            text="📄 Показать ключ",
+            callback_data="show_key",
+        )
+
     return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="📋 Скопировать ключ",
-                copy_text=CopyTextButton(text=vpn_link),
-            )
-        ],
+        [key_button],
         [InlineKeyboardButton(text="📲 Инструкция", callback_data="instruction")],
         [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")],
     ])

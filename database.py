@@ -52,6 +52,12 @@ def init_db() -> None:
     )
     """)
 
+    ensure_column(cur, "purchases", "tg_id", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(cur, "purchases", "tg_username", "TEXT")
+    ensure_column(cur, "purchases", "tariff_id", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(cur, "purchases", "status", "TEXT NOT NULL DEFAULT 'unknown'")
+    ensure_column(cur, "purchases", "created_at", "INTEGER NOT NULL DEFAULT 0")
+
     conn.commit()
     conn.close()
 
