@@ -18,7 +18,7 @@ INSTRUCTION_TEXT = (
     "1. Установите <b>Hiddify</b> из официального источника:\n"
     "• <a href=\"https://apps.apple.com/us/app/hiddify-proxy-vpn/id6596777532\">App Store</a> — iPhone / iPad\n"
     "• <a href=\"https://play.google.com/store/apps/details?id=app.hiddify.com\">Google Play</a> — Android\n"
-    "• <a href=\"https://github.com/hiddify/hiddify-app\">Windows</a> - ПК\n"
+    "• <a href=\"https://github.com/hiddify/hiddify-app\">Windows</a> — ПК\n"
     "2. В боте нажмите <b>🔑 Мой ключ</b>.\n"
     "3. Нажмите кнопку <b>📋 Скопировать ключ</b> или <b>📄 Показать ключ</b>.\n"
     "4. Откройте Hiddify.\n"
