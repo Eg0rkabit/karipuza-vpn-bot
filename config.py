@@ -15,10 +15,6 @@ def parse_admin_ids(value: str) -> list[int]:
     return result
 
 
-def parse_csv(value: str) -> list[str]:
-    return [item.strip() for item in value.split(",") if item.strip()]
-
-
 @dataclass(frozen=True)
 class Settings:
     bot_token: str
@@ -28,14 +24,10 @@ class Settings:
     marzban_username: str
     marzban_password: str
     marzban_inbound_tag: str
-    marzban_inbound_tags: list[str]
     public_host: str
 
     support_username: str
 
-
-marzban_inbound_tag = os.getenv("MARZBAN_INBOUND_TAG", "VLESS TCP REALITY").strip()
-marzban_inbound_tags = parse_csv(os.getenv("MARZBAN_INBOUND_TAGS", "")) or [marzban_inbound_tag]
 
 settings = Settings(
     bot_token=os.getenv("BOT_TOKEN", "").strip(),
@@ -44,8 +36,7 @@ settings = Settings(
     marzban_url=os.getenv("MARZBAN_URL", "http://127.0.0.1:8000").strip().rstrip("/"),
     marzban_username=os.getenv("MARZBAN_USERNAME", "").strip(),
     marzban_password=os.getenv("MARZBAN_PASSWORD", "").strip(),
-    marzban_inbound_tag=marzban_inbound_tag,
-    marzban_inbound_tags=marzban_inbound_tags,
+    marzban_inbound_tag=os.getenv("MARZBAN_INBOUND_TAG", "VLESS TCP REALITY").strip(),
     public_host=os.getenv("PUBLIC_HOST", "176.124.220.50").strip(),
 
     support_username=os.getenv("SUPPORT_USERNAME", "@support").strip(),

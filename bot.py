@@ -435,25 +435,12 @@ async def show_key_callback(callback: CallbackQuery):
         return
 
     vpn_link = user[4]
-    links = [link.strip() for link in vpn_link.splitlines() if link.strip()]
-    if len(links) > 1:
-        labels = ["Основной ключ", "Запасной ключ"]
-        parts = [
-            "📄 <b>Ваши VPN-ключи</b>\n\n"
-            "Сначала попробуйте основной ключ. Если на Wi-Fi появляется timeout, "
-            "удалите профиль в Hiddify и импортируйте запасной ключ.\n"
-        ]
-        for index, link in enumerate(links, start=1):
-            label = labels[index - 1] if index <= len(labels) else f"Ключ {index}"
-            parts.append(f"\n<b>{label}</b>\n<code>{html.escape(link)}</code>")
-        await callback.message.answer("".join(parts))
-    else:
-        await callback.message.answer(
-            "📄 <b>Ваш VPN-ключ</b>\n\n"
-            "Telegram не умеет скрыто копировать очень длинные ключи, "
-            "поэтому скопируйте строку ниже вручную:\n\n"
-            f"<code>{html.escape(vpn_link)}</code>"
-        )
+    await callback.message.answer(
+        "📄 <b>Ваш VPN-ключ</b>\n\n"
+        "Telegram не умеет скрыто копировать очень длинные ключи, "
+        "поэтому скопируйте строку ниже вручную:\n\n"
+        f"<code>{html.escape(vpn_link)}</code>"
+    )
     await callback.answer()
 
 
