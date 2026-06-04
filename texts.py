@@ -3,6 +3,7 @@ BTN_MY_KEY = "🔑 Мой ключ"
 BTN_INSTRUCTION = "📲 Инструкция"
 BTN_SUPPORT = "💬 Поддержка"
 BTN_MENU = "🏠 Главное меню"
+BTN_ADMIN = "🛠 Админка"
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в <b>Karipuza VPN</b>!\n\n"

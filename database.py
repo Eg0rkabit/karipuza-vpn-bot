@@ -176,6 +176,30 @@ def list_recent_users(limit: int = 10):
     return rows
 
 
+def count_users() -> int:
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM users")
+    count = int(cur.fetchone()[0])
+    conn.close()
+    return count
+
+
+def list_users(limit: int = 8, offset: int = 0):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT tg_id, tg_username, marzban_username, expire_at, vpn_link,
+               trial_used, created_at, updated_at
+        FROM users
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT ? OFFSET ?
+    """, (limit, offset))
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
 def clear_user_key(tg_id: int) -> None:
     now = int(time.time())
     conn = connect()

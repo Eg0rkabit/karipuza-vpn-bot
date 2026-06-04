@@ -6,13 +6,18 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 
 import database as db
 from config import settings, validate_settings
 from keyboards import (
+    ADMIN_USERS_PAGE_SIZE,
+    admin_panel_keyboard,
+    admin_user_manage_keyboard,
     admin_user_inline_keyboard,
+    admin_users_keyboard,
     key_inline_keyboard,
     main_reply_keyboard,
     support_inline_keyboard,
@@ -24,8 +29,10 @@ from marzban_api import (
     disable_user,
     enable_user as enable_marzban_user,
     get_active_user,
+    get_user_data,
 )
 from texts import (
+    BTN_ADMIN,
     BTN_BUY,
     BTN_INSTRUCTION,
     BTN_MY_KEY,
@@ -48,6 +55,10 @@ def is_admin(user_id: int) -> bool:
     return user_id in settings.admin_ids
 
 
+def main_keyboard_for(user_id: int):
+    return main_reply_keyboard(include_admin=is_admin(user_id))
+
+
 def format_date(timestamp: int) -> str:
     if not timestamp:
         return "неизвестно"
@@ -58,6 +69,22 @@ def display_user(username: str | None, tg_id: int) -> str:
     if username:
         return f"@{username}"
     return f"ID {tg_id}"
+
+
+def parse_callback_parts(data: str, expected: int) -> list[str]:
+    parts = data.split(":")
+    if len(parts) < expected:
+        raise ValueError("Некорректные данные кнопки")
+    return parts
+
+
+async def edit_or_answer(message: Message, text: str, reply_markup=None) -> None:
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e).lower():
+            return
+        await message.answer(text, reply_markup=reply_markup)
 
 
 async def sync_active_user_from_marzban(tg_id: int, tg_username: str | None) -> bool:
@@ -77,8 +104,75 @@ async def sync_active_user_from_marzban(tg_id: int, tg_username: str | None) -> 
     return True
 
 
+def admin_home_text() -> str:
+    total = db.count_users()
+    return (
+        "🛠 <b>Админ-панель Karipuza VPN</b>\n\n"
+        f"Пользователей в базе: <b>{total}</b>\n\n"
+        "Выберите раздел:"
+    )
+
+
+def admin_users_text(page: int, total: int) -> str:
+    pages = max(1, (total + ADMIN_USERS_PAGE_SIZE - 1) // ADMIN_USERS_PAGE_SIZE)
+    return (
+        "👥 <b>Пользователи</b>\n\n"
+        f"Всего: <b>{total}</b>\n"
+        f"Страница: <b>{page + 1}/{pages}</b>\n\n"
+        "🟢 есть ключ в базе, ⚪ ключа в базе нет, 🧪 тест уже использован."
+    )
+
+
+async def admin_user_text(tg_id: int) -> str:
+    user = db.get_user(tg_id)
+    if not user:
+        local_text = "Локально: <b>пользователь не найден в базе бота</b>"
+        tg_username = None
+        marzban_username = f"tg_{tg_id}"
+        expire_at = 0
+        vpn_link = None
+        trial_used = False
+    else:
+        _, tg_username, marzban_username, expire_at, vpn_link, trial_used, created_at, updated_at = user
+        local_text = (
+            "Локально в боте:\n"
+            f"• Ключ: <b>{'есть' if vpn_link else 'нет'}</b>\n"
+            f"• Активен до: <b>{format_date(expire_at)}</b>\n"
+            f"• Тест: <b>{'использован' if trial_used else 'не использован'}</b>\n"
+            f"• Обновлён: <b>{format_date(updated_at)}</b>"
+        )
+
+    try:
+        marzban_user = await get_user_data(tg_id)
+    except MarzbanError as e:
+        marzban_text = f"Marzban: <b>ошибка</b>\n<code>{html.escape(str(e))}</code>"
+    else:
+        if not marzban_user:
+            marzban_text = "Marzban: <b>пользователь не найден</b>"
+        else:
+            remote_status = html.escape(str(marzban_user.get("status") or "unknown"))
+            remote_expire = int(marzban_user.get("expire") or 0)
+            remote_links = marzban_user.get("links") or []
+            marzban_text = (
+                "Marzban:\n"
+                f"• Username: <code>{html.escape(str(marzban_user.get('username') or marzban_username))}</code>\n"
+                f"• Статус: <b>{remote_status}</b>\n"
+                f"• Активен до: <b>{format_date(remote_expire)}</b>\n"
+                f"• Links: <b>{'есть' if remote_links else 'нет'}</b>"
+            )
+
+    return (
+        "👤 <b>Карточка пользователя</b>\n\n"
+        f"Пользователь: <b>{display_user(tg_username, tg_id)}</b>\n"
+        f"Telegram ID: <code>{tg_id}</code>\n"
+        f"Marzban username: <code>{html.escape(str(marzban_username or f'tg_{tg_id}'))}</code>\n\n"
+        f"{local_text}\n\n"
+        f"{marzban_text}"
+    )
+
+
 async def send_main_menu(message: Message) -> None:
-    await message.answer(WELCOME_TEXT, reply_markup=main_reply_keyboard())
+    await message.answer(WELCOME_TEXT, reply_markup=main_keyboard_for(message.from_user.id))
 
 
 @dp.message(CommandStart())
@@ -99,17 +193,149 @@ async def admin_handler(message: Message):
         await message.answer("Нет доступа.")
         return
 
-    users = db.list_recent_users(10)
-    if not users:
-        await message.answer("🛠 <b>Админ-панель</b>\n\nПока пользователей нет.")
+    await message.answer(admin_home_text(), reply_markup=admin_panel_keyboard())
+
+
+@dp.message(F.text == BTN_ADMIN)
+async def admin_button_handler(message: Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Нет доступа.", reply_markup=main_keyboard_for(message.from_user.id))
         return
 
-    lines = ["🛠 <b>Админ-панель</b>", "", "Последние пользователи:"]
-    for tg_id, tg_username, _, expire_at, trial_used in users:
-        trial_text = "тест использован" if trial_used else "тест не использован"
-        lines.append(f"• {display_user(tg_username, tg_id)} — до {format_date(expire_at)} — {trial_text}")
+    await message.answer(admin_home_text(), reply_markup=admin_panel_keyboard())
 
-    await message.answer("\n".join(lines))
+
+@dp.callback_query(F.data == "admin:home")
+async def admin_home_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+
+    await edit_or_answer(callback.message, admin_home_text(), reply_markup=admin_panel_keyboard())
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin:users:"))
+async def admin_users_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+
+    parts = parse_callback_parts(callback.data, 3)
+    page = max(0, int(parts[2]))
+    total = db.count_users()
+    users = db.list_users(
+        limit=ADMIN_USERS_PAGE_SIZE,
+        offset=page * ADMIN_USERS_PAGE_SIZE,
+    )
+
+    await edit_or_answer(
+        callback.message,
+        admin_users_text(page, total),
+        reply_markup=admin_users_keyboard(users, page, total),
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin:user:"))
+async def admin_user_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+
+    parts = parse_callback_parts(callback.data, 4)
+    tg_id = int(parts[2])
+    page = int(parts[3])
+
+    await edit_or_answer(
+        callback.message,
+        await admin_user_text(tg_id),
+        reply_markup=admin_user_manage_keyboard(tg_id, page),
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin:sync:"))
+async def admin_sync_user_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+
+    parts = parse_callback_parts(callback.data, 4)
+    tg_id = int(parts[2])
+    page = int(parts[3])
+
+    user = db.get_user(tg_id)
+    tg_username = user[1] if user else None
+
+    try:
+        synced = await sync_active_user_from_marzban(tg_id, tg_username)
+    except MarzbanError as e:
+        await callback.answer("Ошибка синхронизации.", show_alert=True)
+        await callback.message.answer(f"❌ Ошибка синхронизации:\n<code>{html.escape(str(e))}</code>")
+        return
+
+    if not synced:
+        await callback.answer("Активный ключ в Marzban не найден.", show_alert=True)
+    else:
+        await callback.answer("Синхронизировано.")
+
+    await edit_or_answer(
+        callback.message,
+        await admin_user_text(tg_id),
+        reply_markup=admin_user_manage_keyboard(tg_id, page),
+    )
+
+
+@dp.callback_query(F.data.startswith("admin:issue:"))
+async def admin_issue_user_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+
+    parts = parse_callback_parts(callback.data, 5)
+    tg_id = int(parts[2])
+    tariff_id = parts[3]
+    page = int(parts[4])
+    tariff = TARIFFS.get(tariff_id)
+
+    if not tariff:
+        await callback.answer("Тариф не найден.", show_alert=True)
+        return
+
+    user = db.get_user(tg_id)
+    tg_username = user[1] if user else None
+
+    await callback.answer("Выдаю доступ...")
+    try:
+        marzban_username, expire_at, vpn_link = await create_or_update_user(
+            tg_id=tg_id,
+            days=int(tariff["days"]),
+            data_limit_gb=int(tariff["data_limit_gb"]),
+        )
+        db.save_vpn_user(
+            tg_id=tg_id,
+            tg_username=tg_username,
+            marzban_username=marzban_username,
+            expire_at=expire_at,
+            vpn_link=vpn_link,
+            mark_trial_used=bool(tariff.get("is_trial")),
+        )
+        db.create_purchase(
+            tg_id=tg_id,
+            tg_username=tg_username,
+            tariff_id=f"admin_{tariff_id}",
+            status="admin_issued",
+        )
+    except Exception as e:
+        await callback.message.answer(f"❌ Ошибка выдачи доступа:\n<code>{html.escape(str(e))}</code>")
+        return
+
+    await edit_or_answer(
+        callback.message,
+        await admin_user_text(tg_id),
+        reply_markup=admin_user_manage_keyboard(tg_id, page),
+    )
 
 
 @dp.message(F.text == BTN_BUY)
@@ -146,7 +372,7 @@ async def my_key_message_handler(message: Message):
             "У вас пока нет активного VPN-ключа.\n\n"
             "Нажмите «🚀 Купить VPN», чтобы получить доступ. "
             "Если админ уже включил ключ вручную, попробуйте ещё раз через минуту.",
-            reply_markup=main_reply_keyboard(),
+            reply_markup=main_keyboard_for(message.from_user.id),
         )
         return
 
@@ -163,7 +389,7 @@ async def my_key_message_handler(message: Message):
 
 @dp.message(F.text == BTN_INSTRUCTION)
 async def instruction_message_handler(message: Message):
-    await message.answer(INSTRUCTION_TEXT, reply_markup=main_reply_keyboard())
+    await message.answer(INSTRUCTION_TEXT, reply_markup=main_keyboard_for(message.from_user.id))
 
 
 @dp.message(F.text == BTN_SUPPORT)
@@ -176,13 +402,13 @@ async def support_message_handler(message: Message):
 
 @dp.callback_query(F.data == "back_main")
 async def back_main_callback(callback: CallbackQuery):
-    await callback.message.answer(WELCOME_TEXT, reply_markup=main_reply_keyboard())
+    await callback.message.answer(WELCOME_TEXT, reply_markup=main_keyboard_for(callback.from_user.id))
     await callback.answer()
 
 
 @dp.callback_query(F.data == "instruction")
 async def instruction_callback(callback: CallbackQuery):
-    await callback.message.answer(INSTRUCTION_TEXT, reply_markup=main_reply_keyboard())
+    await callback.message.answer(INSTRUCTION_TEXT, reply_markup=main_keyboard_for(callback.from_user.id))
     await callback.answer()
 
 
@@ -297,13 +523,13 @@ async def tariff_callback(callback: CallbackQuery):
             "2. Логин и пароль Marzban верные.\n"
             "3. MARZBAN_INBOUND_TAG совпадает с inbound в Marzban.\n"
             "4. На сервере доступен http://127.0.0.1:8000.",
-            reply_markup=main_reply_keyboard(),
+            reply_markup=main_keyboard_for(callback.from_user.id),
         )
     except Exception as e:
         logging.exception("Unknown error while creating VPN key")
         await callback.message.answer(
             f"❌ Неизвестная ошибка:\n<code>{e}</code>",
-            reply_markup=main_reply_keyboard(),
+            reply_markup=main_keyboard_for(callback.from_user.id),
         )
 
 
@@ -313,14 +539,17 @@ async def disable_user_callback(callback: CallbackQuery):
         await callback.answer("Нет доступа.", show_alert=True)
         return
 
-    tg_id = int(callback.data.split(":", 1)[1])
+    parts = callback.data.split(":")
+    tg_id = int(parts[1])
+    page = int(parts[2]) if len(parts) > 2 else 0
 
     try:
         await disable_user(tg_id)
         db.clear_user_key(tg_id)
-        await callback.message.answer(
-            f"⛔ Доступ пользователя <code>{tg_id}</code> отключён.",
-            reply_markup=admin_user_inline_keyboard(tg_id),
+        await edit_or_answer(
+            callback.message,
+            await admin_user_text(tg_id),
+            reply_markup=admin_user_manage_keyboard(tg_id, page),
         )
         await callback.answer("Отключено.")
     except Exception as e:
@@ -334,7 +563,9 @@ async def enable_user_callback(callback: CallbackQuery):
         await callback.answer("Нет доступа.", show_alert=True)
         return
 
-    tg_id = int(callback.data.split(":", 1)[1])
+    parts = callback.data.split(":")
+    tg_id = int(parts[1])
+    page = int(parts[2]) if len(parts) > 2 else 0
 
     try:
         marzban_username, expire_at, vpn_link = await enable_marzban_user(tg_id)
@@ -348,10 +579,10 @@ async def enable_user_callback(callback: CallbackQuery):
             vpn_link=vpn_link,
             mark_trial_used=False,
         )
-        await callback.message.answer(
-            f"✅ Доступ пользователя <code>{tg_id}</code> включён.\n"
-            f"Активен до: <b>{format_date(expire_at)}</b>",
-            reply_markup=admin_user_inline_keyboard(tg_id),
+        await edit_or_answer(
+            callback.message,
+            await admin_user_text(tg_id),
+            reply_markup=admin_user_manage_keyboard(tg_id, page),
         )
         await callback.answer("Включено.")
     except Exception as e:
@@ -369,7 +600,7 @@ async def unknown_callback(callback: CallbackQuery):
 async def unknown_message(message: Message):
     await message.answer(
         "Я не понял сообщение. Используйте меню снизу или команду /start.",
-        reply_markup=main_reply_keyboard(),
+        reply_markup=main_keyboard_for(message.from_user.id),
     )
 
 
