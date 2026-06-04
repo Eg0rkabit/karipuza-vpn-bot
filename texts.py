@@ -15,9 +15,13 @@ WELCOME_TEXT = (
 
 INSTRUCTION_TEXT = (
     "📲 <b>Инструкция подключения</b>\n\n"
-    "1. Установите приложение <b>Hiddify</b>.\n"
+    "1. Установите <b>Hiddify</b> из официального источника:\n"
+    "• <a href=\"https://apps.apple.com/us/app/hiddify-proxy-vpn/id6596777532\">App Store</a> — iPhone / iPad\n"
+    "• <a href=\"https://play.google.com/store/apps/details?id=app.hiddify.com\">Google Play</a> — Android\n"
+    "• <a href=\"https://app.hiddify.com/windows\">ПК Windows</a>\n"
+    "• <a href=\"https://github.com/hiddify/hiddify-app/releases/latest\">Windows / macOS / Linux</a>\n\n"
     "2. В боте нажмите <b>🔑 Мой ключ</b>.\n"
-    "3. Нажмите кнопку <b>📋 Скопировать ключ</b>.\n"
+    "3. Нажмите кнопку <b>📋 Скопировать ключ</b> или <b>📄 Показать ключ</b>.\n"
     "4. Откройте Hiddify.\n"
     "5. Нажмите <b>+</b>.\n"
     "6. Выберите импорт из буфера обмена.\n"
