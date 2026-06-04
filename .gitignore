@@ -3,7 +3,7 @@ venv/
 .venv/
 __pycache__/
 *.pyc
-*.db
 bot.db
-.idea/
+*.db
 .vscode/settings.json
+.idea/
