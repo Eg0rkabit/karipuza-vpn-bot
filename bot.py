@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F
@@ -9,9 +10,25 @@ from aiogram.types import CallbackQuery, Message
 
 import database as db
 from config import settings, validate_settings
-from keyboards import admin_user_menu, back_to_main_menu, key_menu, main_menu, tariffs_menu
+from keyboards import (
+    admin_user_inline_keyboard,
+    key_inline_keyboard,
+    main_reply_keyboard,
+    support_inline_keyboard,
+    tariffs_inline_keyboard,
+)
 from marzban_api import MarzbanError, create_or_update_user, disable_user
-from texts import INSTRUCTION_TEXT, TARIFFS, WELCOME_TEXT
+from texts import (
+    BTN_BUY,
+    BTN_INSTRUCTION,
+    BTN_MY_KEY,
+    BTN_SUPPORT,
+    INSTRUCTION_TEXT,
+    TARIFFS,
+    WELCOME_TEXT,
+)
+
+logging.basicConfig(level=logging.INFO)
 
 bot = Bot(
     token=settings.bot_token,
@@ -30,29 +47,26 @@ def format_date(timestamp: int) -> str:
     return datetime.fromtimestamp(timestamp).strftime("%d.%m.%Y")
 
 
-def user_name(username: str | None, tg_id: int) -> str:
+def display_user(username: str | None, tg_id: int) -> str:
     if username:
         return f"@{username}"
     return f"ID {tg_id}"
 
 
-async def safe_edit_or_answer(callback: CallbackQuery, text: str, reply_markup=None) -> None:
-    try:
-        await callback.message.edit_text(text, reply_markup=reply_markup)
-    except Exception:
-        await callback.message.answer(text, reply_markup=reply_markup)
+async def send_main_menu(message: Message) -> None:
+    await message.answer(WELCOME_TEXT, reply_markup=main_reply_keyboard())
 
 
 @dp.message(CommandStart())
 async def start_handler(message: Message):
     db.ensure_user(message.from_user.id, message.from_user.username)
-    await message.answer(WELCOME_TEXT, reply_markup=main_menu())
+    await send_main_menu(message)
 
 
 @dp.message(Command("menu"))
 async def menu_handler(message: Message):
     db.ensure_user(message.from_user.id, message.from_user.username)
-    await message.answer("Главное меню Karipuza VPN:", reply_markup=main_menu())
+    await send_main_menu(message)
 
 
 @dp.message(Command("admin"))
@@ -69,53 +83,94 @@ async def admin_handler(message: Message):
     lines = ["🛠 <b>Админ-панель</b>", "", "Последние пользователи:"]
     for tg_id, tg_username, _, expire_at, trial_used in users:
         trial_text = "тест использован" if trial_used else "тест не использован"
-        lines.append(f"• {user_name(tg_username, tg_id)} — до {format_date(expire_at)} — {trial_text}")
+        lines.append(f"• {display_user(tg_username, tg_id)} — до {format_date(expire_at)} — {trial_text}")
 
     await message.answer("\n".join(lines))
 
 
+@dp.message(F.text == BTN_BUY)
+async def buy_message_handler(message: Message):
+    db.ensure_user(message.from_user.id, message.from_user.username)
+
+    trial_available = not db.has_used_trial(message.from_user.id)
+    await message.answer(
+        "Выберите тариф:",
+        reply_markup=tariffs_inline_keyboard(trial_available=trial_available),
+    )
+
+
+@dp.message(F.text == BTN_MY_KEY)
+async def my_key_message_handler(message: Message):
+    db.ensure_user(message.from_user.id, message.from_user.username)
+
+    user = db.get_user(message.from_user.id)
+    if not user or not user[4]:
+        await message.answer(
+            "У вас пока нет активного VPN-ключа.\n\n"
+            "Нажмите «🚀 Купить VPN», чтобы получить доступ.",
+            reply_markup=main_reply_keyboard(),
+        )
+        return
+
+    tg_id, tg_username, _, expire_at, vpn_link, _, _, _ = user
+
+    await message.answer(
+        f"🔑 <b>Мой ключ</b>\n\n"
+        f"Пользователь: <b>{display_user(tg_username, tg_id)}</b>\n"
+        f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
+        f"Нажмите кнопку ниже, чтобы скопировать ключ.",
+        reply_markup=key_inline_keyboard(vpn_link),
+    )
+
+
+@dp.message(F.text == BTN_INSTRUCTION)
+async def instruction_message_handler(message: Message):
+    await message.answer(INSTRUCTION_TEXT, reply_markup=main_reply_keyboard())
+
+
+@dp.message(F.text == BTN_SUPPORT)
+async def support_message_handler(message: Message):
+    await message.answer(
+        "💬 Поддержка Karipuza VPN:",
+        reply_markup=support_inline_keyboard(),
+    )
+
+
 @dp.callback_query(F.data == "back_main")
-async def back_main_handler(callback: CallbackQuery):
-    await callback.message.answer("Главное меню Karipuza VPN:", reply_markup=main_menu())
+async def back_main_callback(callback: CallbackQuery):
+    await callback.message.answer(WELCOME_TEXT, reply_markup=main_reply_keyboard())
     await callback.answer()
 
 
-@dp.callback_query(F.data == "buy")
-async def buy_handler(callback: CallbackQuery):
-    db.ensure_user(callback.from_user.id, callback.from_user.username)
-
-    trial_available = not db.has_used_trial(callback.from_user.id)
-    await safe_edit_or_answer(
-        callback,
-        "Выберите тариф:",
-        reply_markup=tariffs_menu(trial_available=trial_available),
-    )
+@dp.callback_query(F.data == "instruction")
+async def instruction_callback(callback: CallbackQuery):
+    await callback.message.answer(INSTRUCTION_TEXT, reply_markup=main_reply_keyboard())
     await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("tariff:"))
-async def tariff_handler(callback: CallbackQuery):
+async def tariff_callback(callback: CallbackQuery):
     db.ensure_user(callback.from_user.id, callback.from_user.username)
 
     tariff_id = callback.data.split(":", 1)[1]
     tariff = TARIFFS.get(tariff_id)
 
     if not tariff:
-        await callback.answer("Тариф не найден", show_alert=True)
+        await callback.answer("Тариф не найден.", show_alert=True)
         return
 
     is_trial = bool(tariff.get("is_trial"))
 
     if is_trial and db.has_used_trial(callback.from_user.id):
         await callback.answer("Тестовый период уже использован.", show_alert=True)
-        await safe_edit_or_answer(
-            callback,
+        await callback.message.answer(
             "Тестовый период уже использован.\n\nВыберите обычный тариф:",
-            reply_markup=tariffs_menu(trial_available=False),
+            reply_markup=tariffs_inline_keyboard(trial_available=False),
         )
         return
 
-    await safe_edit_or_answer(callback, "⏳ Создаю ваш VPN-ключ...")
+    await callback.answer("Создаю ключ...")
+    await callback.message.answer("⏳ Создаю ваш VPN-ключ...")
 
     try:
         marzban_username, expire_at, vpn_link = await create_or_update_user(
@@ -140,30 +195,28 @@ async def tariff_handler(callback: CallbackQuery):
             status="auto_issued",
         )
 
-        await safe_edit_or_answer(
-            callback,
+        await callback.message.answer(
             f"✅ <b>Доступ активирован!</b>\n\n"
             f"Тариф: <b>{tariff['title']}</b>\n"
             f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
             f"🔑 Нажмите кнопку ниже, чтобы скопировать ключ.\n"
             f"📲 Если не знаете, как подключиться — откройте инструкцию.",
-            reply_markup=key_menu(vpn_link),
+            reply_markup=key_inline_keyboard(vpn_link),
         )
 
         for admin_id in settings.admin_ids:
             await bot.send_message(
                 admin_id,
                 f"✅ <b>Автоматически выдан доступ</b>\n\n"
-                f"Пользователь: {user_name(callback.from_user.username, callback.from_user.id)}\n"
+                f"Пользователь: {display_user(callback.from_user.username, callback.from_user.id)}\n"
                 f"Telegram ID: <code>{callback.from_user.id}</code>\n"
                 f"Тариф: <b>{tariff['title']}</b>\n"
                 f"Активен до: <b>{format_date(expire_at)}</b>",
-                reply_markup=admin_user_menu(callback.from_user.id),
+                reply_markup=admin_user_inline_keyboard(callback.from_user.id),
             )
 
     except MarzbanError as e:
-        await safe_edit_or_answer(
-            callback,
+        await callback.message.answer(
             "❌ Не получилось создать ключ через Marzban.\n\n"
             f"<code>{e}</code>\n\n"
             "Проверьте:\n"
@@ -171,57 +224,20 @@ async def tariff_handler(callback: CallbackQuery):
             "2. Логин и пароль Marzban верные.\n"
             "3. MARZBAN_INBOUND_TAG совпадает с inbound в Marzban.\n"
             "4. На сервере доступен http://127.0.0.1:8000.",
-            reply_markup=main_menu(),
+            reply_markup=main_reply_keyboard(),
         )
     except Exception as e:
-        await safe_edit_or_answer(
-            callback,
+        logging.exception("Unknown error while creating VPN key")
+        await callback.message.answer(
             f"❌ Неизвестная ошибка:\n<code>{e}</code>",
-            reply_markup=main_menu(),
+            reply_markup=main_reply_keyboard(),
         )
-
-    await callback.answer()
-
-
-@dp.callback_query(F.data == "my_key")
-async def my_key_handler(callback: CallbackQuery):
-    db.ensure_user(callback.from_user.id, callback.from_user.username)
-
-    user = db.get_user(callback.from_user.id)
-
-    if not user or not user[4]:
-        await safe_edit_or_answer(
-            callback,
-            "У вас пока нет активного VPN-ключа.\n\n"
-            "Нажмите «Купить VPN», чтобы получить доступ.",
-            reply_markup=main_menu(),
-        )
-        await callback.answer()
-        return
-
-    tg_id, tg_username, _, expire_at, vpn_link, _, _, _ = user
-
-    await safe_edit_or_answer(
-        callback,
-        f"🔑 <b>Мой ключ</b>\n\n"
-        f"Пользователь: <b>{user_name(tg_username, tg_id)}</b>\n"
-        f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
-        f"Нажмите кнопку ниже, чтобы скопировать ключ.",
-        reply_markup=key_menu(vpn_link),
-    )
-    await callback.answer()
-
-
-@dp.callback_query(F.data == "instruction")
-async def instruction_handler(callback: CallbackQuery):
-    await safe_edit_or_answer(callback, INSTRUCTION_TEXT, reply_markup=main_menu())
-    await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("disable_user:"))
-async def disable_user_handler(callback: CallbackQuery):
+async def disable_user_callback(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
-        await callback.answer("Нет доступа", show_alert=True)
+        await callback.answer("Нет доступа.", show_alert=True)
         return
 
     tg_id = int(callback.data.split(":", 1)[1])
@@ -229,22 +245,31 @@ async def disable_user_handler(callback: CallbackQuery):
     try:
         await disable_user(tg_id)
         db.clear_user_key(tg_id)
-        await callback.message.edit_text(f"⛔ Доступ пользователя <code>{tg_id}</code> отключён.")
+        await callback.message.answer(f"⛔ Доступ пользователя <code>{tg_id}</code> отключён.")
+        await callback.answer("Отключено.")
     except Exception as e:
-        await callback.message.edit_text(f"❌ Ошибка отключения:\n<code>{e}</code>")
-
-    await callback.answer()
+        await callback.message.answer(f"❌ Ошибка отключения:\n<code>{e}</code>")
+        await callback.answer("Ошибка.", show_alert=True)
 
 
 @dp.callback_query()
-async def unknown_callback_handler(callback: CallbackQuery):
-    await callback.answer("Кнопка устарела. Откройте /start", show_alert=True)
+async def unknown_callback(callback: CallbackQuery):
+    logging.warning("Unknown callback data: %s", callback.data)
+    await callback.answer("Кнопка устарела. Нажмите /start.", show_alert=True)
+
+
+@dp.message()
+async def unknown_message(message: Message):
+    await message.answer(
+        "Я не понял сообщение. Используйте меню снизу или команду /start.",
+        reply_markup=main_reply_keyboard(),
+    )
 
 
 async def main():
     validate_settings()
     db.init_db()
-    print("Karipuza VPN Bot started")
+    logging.info("Karipuza VPN Bot started")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 

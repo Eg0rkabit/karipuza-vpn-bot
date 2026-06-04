@@ -1,8 +1,14 @@
+BTN_BUY = "🚀 Купить VPN"
+BTN_MY_KEY = "🔑 Мой ключ"
+BTN_INSTRUCTION = "📲 Инструкция"
+BTN_SUPPORT = "💬 Поддержка"
+BTN_MENU = "🏠 Главное меню"
+
 WELCOME_TEXT = (
     "👋 Добро пожаловать в <b>Karipuza VPN</b>!\n\n"
     "Здесь можно получить VPN-доступ, открыть свой ключ "
     "и посмотреть инструкцию подключения.\n\n"
-    "Выберите действие:"
+    "Выберите действие в меню снизу:"
 )
 
 INSTRUCTION_TEXT = (
@@ -28,7 +34,6 @@ TARIFFS = {
         "price": "Бесплатно",
         "data_limit_gb": 0,
         "is_trial": True,
-        "auto_issue": True,
     },
     "month_1": {
         "title": "🚀 1 месяц",
@@ -36,7 +41,6 @@ TARIFFS = {
         "price": "299 ₽",
         "data_limit_gb": 0,
         "is_trial": False,
-        "auto_issue": True,
     },
     "month_3": {
         "title": "🔥 3 месяца",
@@ -44,6 +48,5 @@ TARIFFS = {
         "price": "799 ₽",
         "data_limit_gb": 0,
         "is_trial": False,
-        "auto_issue": True,
     },
 }

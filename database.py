@@ -41,20 +41,6 @@ def init_db() -> None:
     conn.close()
 
 
-def get_user(tg_id: int):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT tg_id, tg_username, marzban_username, expire_at, vpn_link,
-               trial_used, created_at, updated_at
-        FROM users
-        WHERE tg_id = ?
-    """, (tg_id,))
-    row = cur.fetchone()
-    conn.close()
-    return row
-
-
 def ensure_user(tg_id: int, tg_username: str | None = None) -> None:
     now = int(time.time())
     conn = connect()
@@ -80,6 +66,20 @@ def ensure_user(tg_id: int, tg_username: str | None = None) -> None:
 
     conn.commit()
     conn.close()
+
+
+def get_user(tg_id: int):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT tg_id, tg_username, marzban_username, expire_at, vpn_link,
+               trial_used, created_at, updated_at
+        FROM users
+        WHERE tg_id = ?
+    """, (tg_id,))
+    row = cur.fetchone()
+    conn.close()
+    return row
 
 
 def has_used_trial(tg_id: int) -> bool:

@@ -1,21 +1,27 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.types import CopyTextButton
+from aiogram.types import (
+    CopyTextButton,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 from config import settings
-from texts import TARIFFS
+from texts import BTN_BUY, BTN_INSTRUCTION, BTN_MENU, BTN_MY_KEY, BTN_SUPPORT, TARIFFS
 
 
-def main_menu() -> InlineKeyboardMarkup:
-    support = settings.support_username.replace("@", "")
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 Купить VPN", callback_data="buy")],
-        [InlineKeyboardButton(text="🔑 Мой ключ", callback_data="my_key")],
-        [InlineKeyboardButton(text="📲 Инструкция", callback_data="instruction")],
-        [InlineKeyboardButton(text="💬 Поддержка", url=f"https://t.me/{support}")],
-    ])
+def main_reply_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_BUY), KeyboardButton(text=BTN_MY_KEY)],
+            [KeyboardButton(text=BTN_INSTRUCTION), KeyboardButton(text=BTN_SUPPORT)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выберите действие",
+    )
 
 
-def tariffs_menu(trial_available: bool) -> InlineKeyboardMarkup:
+def tariffs_inline_keyboard(trial_available: bool) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
 
     for tariff_id, tariff in TARIFFS.items():
@@ -29,11 +35,11 @@ def tariffs_menu(trial_available: bool) -> InlineKeyboardMarkup:
             )
         ])
 
-    rows.append([InlineKeyboardButton(text="⬅️ Главное меню", callback_data="back_main")])
+    rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def key_menu(vpn_link: str) -> InlineKeyboardMarkup:
+def key_inline_keyboard(vpn_link: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
@@ -42,17 +48,18 @@ def key_menu(vpn_link: str) -> InlineKeyboardMarkup:
             )
         ],
         [InlineKeyboardButton(text="📲 Инструкция", callback_data="instruction")],
-        [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="back_main")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")],
     ])
 
 
-def back_to_main_menu() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ Главное меню", callback_data="back_main")]
-    ])
-
-
-def admin_user_menu(tg_id: int) -> InlineKeyboardMarkup:
+def admin_user_inline_keyboard(tg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⛔ Отключить доступ", callback_data=f"disable_user:{tg_id}")],
+    ])
+
+
+def support_inline_keyboard() -> InlineKeyboardMarkup:
+    support = settings.support_username.replace("@", "")
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Написать в поддержку", url=f"https://t.me/{support}")],
     ])
