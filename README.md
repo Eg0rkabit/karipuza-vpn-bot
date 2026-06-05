@@ -47,6 +47,18 @@ MARZBAN_INBOUND_TAGS=VLESS TCP REALITY,VLESS TCP REALITY APPLE TEST
 
 Для подписок Marzban должен отдавать внешний HTTPS-адрес. Обычно это настраивается в `/opt/marzban/.env` через `XRAY_SUBSCRIPTION_URL_PREFIX`.
 
+## HTTPS-подписки
+
+DNS `sub.karipuza.ru` должен вести на VPS. Reality использует порт `443`, поэтому подписки выдаются через отдельный HTTPS-порт `8443`:
+
+```bash
+cd /opt/karipuza-bot
+git pull
+bash scripts/setup-subscription-https.sh
+```
+
+Скрипт настраивает nginx, Let's Encrypt, `XRAY_SUBSCRIPTION_URL_PREFIX=https://sub.karipuza.ru:8443` в Marzban и `SUBSCRIPTION_URL_PREFIX=https://sub.karipuza.ru:8443` в боте.
+
 ## Запуск
 
 ```bash
