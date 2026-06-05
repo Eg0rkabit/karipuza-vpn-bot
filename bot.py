@@ -3,7 +3,6 @@ import html
 import logging
 import os
 import shutil
-import socket
 import time
 from datetime import datetime
 
@@ -42,6 +41,7 @@ from texts import (
     BTN_ADMIN,
     BTN_BUY,
     BTN_INSTRUCTION,
+    LEGACY_BTN_MY_KEY,
     BTN_MY_KEY,
     BTN_PROFILE,
     BTN_SUPPORT,
@@ -200,18 +200,6 @@ def read_load_status() -> str:
         return "неизвестно"
 
 
-def resolve_host(host: str) -> tuple[list[str], str | None]:
-    if not host:
-        return [], "домен не задан"
-
-    try:
-        _, _, addresses = socket.gethostbyname_ex(host)
-    except Exception as e:
-        return [], str(e)
-
-    return sorted(set(addresses)), None
-
-
 async def marzban_status_text() -> str:
     try:
         await asyncio.wait_for(get_token(), timeout=8)
@@ -221,31 +209,13 @@ async def marzban_status_text() -> str:
     return "✅ доступен"
 
 
-async def dns_status_text() -> str:
-    host = settings.subscription_check_host
-    addresses, error = await asyncio.to_thread(resolve_host, host)
-    if error:
-        return f"❌ {html.escape(host)} не найден: <code>{html.escape(error)}</code>"
-
-    expected_ip = settings.public_host
-    addresses_text = ", ".join(addresses)
-    if expected_ip and expected_ip not in addresses:
-        return f"⚠️ {html.escape(host)} → <code>{html.escape(addresses_text)}</code>, ожидали <code>{html.escape(expected_ip)}</code>"
-
-    return f"✅ {html.escape(host)} → <code>{html.escape(addresses_text)}</code>"
-
-
 async def server_status_text() -> str:
-    marzban_status, dns_status = await asyncio.gather(
-        marzban_status_text(),
-        dns_status_text(),
-    )
+    marzban_status = await marzban_status_text()
 
     return (
         "📊 <b>Статус сервера</b>\n\n"
         f"Бот: <b>✅ работает</b>\n"
-        f"Marzban: {marzban_status}\n"
-        f"DNS подписки: {dns_status}\n\n"
+        f"Marzban: {marzban_status}\n\n"
         f"Uptime: <b>{read_uptime()}</b>\n"
         f"Нагрузка 1/5/15 мин: <b>{read_load_status()}</b>\n"
         f"RAM: <b>{read_memory_status()}</b>\n"
@@ -401,11 +371,11 @@ def user_access_text(user) -> str:
     subscription_help = f"\n\n{SUBSCRIPTION_HELP_TEXT}" if is_subscription_link(vpn_link) else ""
 
     return (
-        f"🔑 <b>Мой ключ</b>\n\n"
+        f"🔗 <b>Моя подписка</b>\n\n"
         f"Пользователь: <b>{display_user(tg_username, tg_id)}</b>\n"
         f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
         f"Осталось: <b>{days_left_text(expire_at)}</b>\n\n"
-        f"Нажмите кнопку ниже, чтобы получить ссылку подключения."
+        f"Нажмите кнопку ниже, чтобы получить ссылку для подключения."
         f"{subscription_help}"
     )
 
@@ -483,7 +453,7 @@ async def admin_user_text(tg_id: int) -> str:
         _, tg_username, marzban_username, expire_at, vpn_link, trial_used, created_at, updated_at = user
         local_text = (
             "Локально в боте:\n"
-            f"• Ссылка доступа: <b>{'есть' if vpn_link else 'нет'}</b>\n"
+            f"• Ссылка подписки/доступа: <b>{'есть' if vpn_link else 'нет'}</b>\n"
             f"• Активен до: <b>{format_date(expire_at)}</b>\n"
             f"• Тест: <b>{'использован' if trial_used else 'не использован'}</b>\n"
             f"• Обновлён: <b>{format_date(updated_at)}</b>"
@@ -507,7 +477,7 @@ async def admin_user_text(tg_id: int) -> str:
                 f"• Статус: <b>{remote_status}</b>\n"
                 f"• Активен до: <b>{format_date(remote_expire)}</b>\n"
                 f"• Подписка: <b>{'есть' if remote_subscription else 'нет'}</b>\n"
-                f"• Ключи: <b>{'есть' if remote_links else 'нет'}</b>"
+                f"• Конфиги: <b>{'есть' if remote_links else 'нет'}</b>"
             )
 
     return (
@@ -693,7 +663,7 @@ async def my_key_menu_callback(callback: CallbackQuery):
     user = await get_user_with_access(
         callback.from_user.id,
         callback.from_user.username,
-        "Синхронизация доступа через inline-меню Мой ключ",
+        "Синхронизация доступа через inline-меню Моя подписка",
     )
 
     if not is_local_access_active(user):
@@ -836,7 +806,7 @@ async def admin_issue_user_callback(callback: CallbackQuery):
     user = db.get_user(tg_id)
     tg_username = user[1] if user else None
 
-    await callback.answer("Выдаю доступ...")
+    await callback.answer("Выдаю подписку...")
     try:
         marzban_username, expire_at, vpn_link = await create_or_update_user(
             tg_id=tg_id,
@@ -890,7 +860,7 @@ async def my_key_message_handler(message: Message):
     user = await get_user_with_access(
         message.from_user.id,
         message.from_user.username,
-        "Синхронизация доступа через кнопку Мой ключ",
+        "Синхронизация доступа через кнопку Моя подписка",
     )
 
     if not is_local_access_active(user):
@@ -904,6 +874,11 @@ async def my_key_message_handler(message: Message):
         user_access_text(user),
         reply_markup=key_inline_keyboard(user[4]),
     )
+
+
+@dp.message(F.text == LEGACY_BTN_MY_KEY)
+async def legacy_my_key_message_handler(message: Message):
+    await my_key_message_handler(message)
 
 
 @dp.message(F.text == BTN_PROFILE)
@@ -976,7 +951,7 @@ async def show_key_callback(callback: CallbackQuery):
         return
 
     vpn_link = user[4]
-    title = "Ваша VPN-подписка" if is_subscription_link(vpn_link) else "Ваш VPN-ключ"
+    title = "Ваша VPN-подписка" if is_subscription_link(vpn_link) else "Ваша ссылка доступа"
     await edit_or_answer(
         callback.message,
         f"📄 <b>{title}</b>\n\n"
@@ -991,7 +966,7 @@ async def show_key_callback(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("tariff:"))
 async def tariff_callback(callback: CallbackQuery):
     if callback.from_user.id in active_key_requests:
-        await callback.answer("Доступ уже создаётся, подождите.", show_alert=True)
+        await callback.answer("Подписка уже создаётся, подождите.", show_alert=True)
         return
 
     if await answer_if_rate_limited(callback, HEAVY_ACTION_COOLDOWN_SECONDS, heavy=True):
@@ -1019,8 +994,8 @@ async def tariff_callback(callback: CallbackQuery):
 
     active_key_requests.add(callback.from_user.id)
     try:
-        await callback.answer("Готовлю доступ...")
-        await edit_or_answer(callback.message, "⏳ Готовлю ваш VPN-доступ...")
+        await callback.answer("Готовлю подписку...")
+        await edit_or_answer(callback.message, "⏳ Готовлю вашу VPN-подписку...")
 
         marzban_username, expire_at, vpn_link = await create_or_update_user(
             tg_id=callback.from_user.id,
@@ -1046,10 +1021,10 @@ async def tariff_callback(callback: CallbackQuery):
 
         await edit_or_answer(
             callback.message,
-            f"✅ <b>Доступ активирован!</b>\n\n"
+            f"✅ <b>VPN-подписка активирована!</b>\n\n"
             f"Тариф: <b>{tariff['title']}</b>\n"
             f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
-            f"🔑 Нажмите кнопку ниже, чтобы получить ссылку подключения.\n"
+            f"🔗 Нажмите кнопку ниже, чтобы получить ссылку подписки.\n"
             f"📲 Если не знаете, как подключиться — откройте инструкцию.",
             reply_markup=key_inline_keyboard(vpn_link),
         )
@@ -1081,7 +1056,7 @@ async def tariff_callback(callback: CallbackQuery):
             reply_markup=main_keyboard_for(callback.from_user.id),
         )
     except Exception as e:
-        logging.exception("Unknown error while creating VPN key")
+        logging.exception("Unknown error while creating VPN access")
         await notify_admins_about_error(
             e,
             action=f"Неизвестная ошибка при создании VPN-доступа, тариф {tariff['title']}",

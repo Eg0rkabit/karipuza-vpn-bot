@@ -36,7 +36,6 @@ class Settings:
     marzban_inbound_tags: list[str]
     public_host: str
     subscription_url_prefix: str
-    subscription_check_host: str
 
     support_username: str
 
@@ -55,7 +54,6 @@ settings = Settings(
     marzban_inbound_tags=inbound_tags,
     public_host=os.getenv("PUBLIC_HOST", "176.124.220.50").strip(),
     subscription_url_prefix=os.getenv("SUBSCRIPTION_URL_PREFIX", "").strip().rstrip("/"),
-    subscription_check_host=os.getenv("SUBSCRIPTION_CHECK_HOST", "sub.karipuza.ru").strip(),
 
     support_username=os.getenv("SUPPORT_USERNAME", "@support").strip(),
 )

@@ -7,14 +7,14 @@
 
 - `/start`
 - `🚀 Купить VPN`
-- `🔑 Мой ключ`
+- `🔗 Моя подписка`
 - `👤 Профиль`
 - `📲 Инструкция`
 - `💬 Поддержка`
 - Тест 1 день
 - Тест можно получить только один раз
 - Автоматическая выдача доступа через Marzban
-- Выдача ссылки подписки Marzban, если она настроена
+- Выдача ссылки подписки Marzban, если она настроена, с запасной прямой ссылкой доступа
 - Кнопка копирования ссылки без показа полной ссылки в сообщении
 - Напоминания пользователю за 3 дня, за 1 день и после окончания доступа
 - Админ-уведомление
@@ -34,8 +34,7 @@ MARZBAN_PASSWORD=пароль_Marzban
 MARZBAN_INBOUND_TAG=VLESS TCP REALITY
 MARZBAN_INBOUND_TAGS=VLESS TCP REALITY
 PUBLIC_HOST=176.124.220.50
-SUBSCRIPTION_URL_PREFIX=https://vpn.example.com
-SUBSCRIPTION_CHECK_HOST=sub.karipuza.ru
+SUBSCRIPTION_URL_PREFIX=https://sub.karipuza.ru:8443
 
 SUPPORT_USERNAME=@your_username
 ```

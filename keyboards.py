@@ -57,7 +57,7 @@ def profile_inline_keyboard(has_active_access: bool) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
 
     if has_active_access:
-        rows.append([InlineKeyboardButton(text="🔑 Мой ключ", callback_data="menu:key")])
+        rows.append([InlineKeyboardButton(text="🔗 Моя подписка", callback_data="menu:key")])
 
     rows.append([InlineKeyboardButton(text="🚀 Купить / продлить VPN", callback_data="menu:buy")])
     rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")])
@@ -88,12 +88,12 @@ def key_inline_keyboard(vpn_link: str) -> InlineKeyboardMarkup:
 
     if len(vpn_link) <= COPY_TEXT_MAX_LENGTH:
         key_button = InlineKeyboardButton(
-            text="📋 Скопировать ссылку" if is_subscription else "📋 Скопировать ключ",
+            text="📋 Скопировать подписку" if is_subscription else "📋 Скопировать ссылку",
             copy_text=CopyTextButton(text=vpn_link),
         )
     else:
         key_button = InlineKeyboardButton(
-            text="📄 Показать ссылку" if is_subscription else "📄 Показать ключ",
+            text="📄 Показать подписку" if is_subscription else "📄 Показать ссылку",
             callback_data="show_key",
         )
 
