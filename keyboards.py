@@ -7,7 +7,9 @@ from aiogram.types import (
 )
 
 from config import settings
-from texts import BTN_ADMIN, BTN_BUY, BTN_INSTRUCTION, BTN_MENU, BTN_MY_KEY, BTN_SUPPORT, TARIFFS
+import time
+
+from texts import BTN_ADMIN, BTN_BUY, BTN_INSTRUCTION, BTN_MENU, BTN_MY_KEY, BTN_PROFILE, BTN_SUPPORT, TARIFFS
 
 COPY_TEXT_MAX_LENGTH = 256
 ADMIN_USERS_PAGE_SIZE = 8
@@ -20,6 +22,7 @@ def is_subscription_link(vpn_link: str) -> bool:
 def main_reply_keyboard(include_admin: bool = False) -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text=BTN_BUY), KeyboardButton(text=BTN_MY_KEY)],
+        [KeyboardButton(text=BTN_PROFILE)],
         [KeyboardButton(text=BTN_INSTRUCTION), KeyboardButton(text=BTN_SUPPORT)],
     ]
     if include_admin:
@@ -34,9 +37,10 @@ def main_reply_keyboard(include_admin: bool = False) -> ReplyKeyboardMarkup:
 
 def main_menu_inline_keyboard(include_admin: bool = False) -> InlineKeyboardMarkup:
     rows = [
+        [InlineKeyboardButton(text=BTN_BUY, callback_data="menu:buy")],
         [
-            InlineKeyboardButton(text=BTN_BUY, callback_data="menu:buy"),
             InlineKeyboardButton(text=BTN_MY_KEY, callback_data="menu:key"),
+            InlineKeyboardButton(text=BTN_PROFILE, callback_data="menu:profile"),
         ],
         [
             InlineKeyboardButton(text=BTN_INSTRUCTION, callback_data="instruction"),
@@ -46,6 +50,17 @@ def main_menu_inline_keyboard(include_admin: bool = False) -> InlineKeyboardMark
     if include_admin:
         rows.append([InlineKeyboardButton(text=BTN_ADMIN, callback_data="admin:home")])
 
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def profile_inline_keyboard(has_active_access: bool) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+
+    if has_active_access:
+        rows.append([InlineKeyboardButton(text="🔑 Мой ключ", callback_data="menu:key")])
+
+    rows.append([InlineKeyboardButton(text="🚀 Купить / продлить VPN", callback_data="menu:buy")])
+    rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -118,11 +133,17 @@ def admin_server_status_keyboard() -> InlineKeyboardMarkup:
 
 def admin_users_keyboard(users: list[tuple], page: int, total: int) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
+    now = int(time.time())
 
     for user in users:
         tg_id, tg_username, _, expire_at, vpn_link, trial_used, _, _ = user
         name = f"@{tg_username}" if tg_username else f"ID {tg_id}"
-        status = "🟢" if vpn_link and expire_at else "⚪"
+        if vpn_link and expire_at and expire_at > now:
+            status = "🟢"
+        elif vpn_link and expire_at:
+            status = "🟡"
+        else:
+            status = "⚪"
         trial = " 🧪" if trial_used else ""
         rows.append([
             InlineKeyboardButton(

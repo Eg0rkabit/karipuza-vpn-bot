@@ -25,6 +25,7 @@ from keyboards import (
     admin_users_keyboard,
     key_inline_keyboard,
     main_menu_inline_keyboard,
+    profile_inline_keyboard,
     support_inline_keyboard,
     tariffs_inline_keyboard,
 )
@@ -42,6 +43,7 @@ from texts import (
     BTN_BUY,
     BTN_INSTRUCTION,
     BTN_MY_KEY,
+    BTN_PROFILE,
     BTN_SUPPORT,
     INSTRUCTION_TEXT,
     TARIFFS,
@@ -52,6 +54,9 @@ logging.basicConfig(level=logging.INFO)
 
 ACTION_COOLDOWN_SECONDS = 0.8
 HEAVY_ACTION_COOLDOWN_SECONDS = 4.0
+EXPIRY_NOTIFICATION_INTERVAL_SECONDS = 60 * 60
+EXPIRY_NOTICE_3D_SECONDS = 3 * 86400
+EXPIRY_NOTICE_1D_SECONDS = 86400
 GENERIC_ERROR_TEXT = "❌ Ошибка, обратитесь к админу."
 SUBSCRIPTION_HELP_TEXT = (
     "Это ссылка подписки: её можно добавить в Hiddify один раз, "
@@ -91,6 +96,40 @@ def display_user(username: str | None, tg_id: int) -> str:
 
 def is_subscription_link(vpn_link: str) -> bool:
     return vpn_link.startswith(("http://", "https://"))
+
+
+def seconds_until_expire(expire_at: int) -> int | None:
+    if not expire_at:
+        return None
+    return expire_at - int(time.time())
+
+
+def is_local_access_active(user) -> bool:
+    if not user or not user[4]:
+        return False
+
+    expire_at = int(user[3] or 0)
+    seconds_left = seconds_until_expire(expire_at)
+    return seconds_left is None or seconds_left > 0
+
+
+def days_left_text(expire_at: int) -> str:
+    seconds_left = seconds_until_expire(expire_at)
+    if seconds_left is None:
+        return "без ограничения"
+    if seconds_left <= 0:
+        return "закончился"
+
+    days = max(1, (seconds_left + 86399) // 86400)
+    if 11 <= days % 100 <= 14:
+        word = "дней"
+    elif days % 10 == 1:
+        word = "день"
+    elif 2 <= days % 10 <= 4:
+        word = "дня"
+    else:
+        word = "дней"
+    return f"{days} {word}"
 
 
 def format_size(size_bytes: int) -> str:
@@ -342,7 +381,14 @@ async def get_user_with_access(tg_id: int, tg_username: str | None, action: str)
     return user
 
 
-def no_access_text() -> str:
+def no_access_text(user=None) -> str:
+    if user and user[4] and int(user[3] or 0) > 0:
+        return (
+            "⏳ <b>VPN-доступ закончился</b>\n\n"
+            f"Доступ был активен до: <b>{format_date(int(user[3] or 0))}</b>\n\n"
+            "Нажмите «🚀 Купить VPN», чтобы продлить доступ."
+        )
+
     return (
         "У вас пока нет активного VPN-доступа.\n\n"
         "Нажмите «🚀 Купить VPN», чтобы получить доступ. "
@@ -358,8 +404,50 @@ def user_access_text(user) -> str:
         f"🔑 <b>Мой ключ</b>\n\n"
         f"Пользователь: <b>{display_user(tg_username, tg_id)}</b>\n"
         f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
+        f"Осталось: <b>{days_left_text(expire_at)}</b>\n\n"
         f"Нажмите кнопку ниже, чтобы получить ссылку подключения."
         f"{subscription_help}"
+    )
+
+
+def profile_text(user, tg_id: int, tg_username: str | None) -> str:
+    if not user:
+        return (
+            "👤 <b>Профиль</b>\n\n"
+            f"Пользователь: <b>{display_user(tg_username, tg_id)}</b>\n"
+            f"Telegram ID: <code>{tg_id}</code>\n\n"
+            "Статус: <b>⚪ доступа нет</b>\n"
+            "Тест: <b>доступен</b>"
+        )
+
+    _, saved_username, _, expire_at, vpn_link, trial_used, created_at, _ = user
+    username = saved_username or tg_username
+
+    if is_local_access_active(user):
+        status = "✅ активен"
+        active_until = format_date(expire_at)
+        left = days_left_text(expire_at)
+    elif vpn_link and expire_at:
+        status = "⏳ закончился"
+        active_until = format_date(expire_at)
+        left = "0 дней"
+    else:
+        status = "⚪ доступа нет"
+        active_until = "нет"
+        left = "нет"
+
+    trial_text = "использован" if trial_used else "доступен"
+    created_text = format_date(created_at)
+
+    return (
+        "👤 <b>Профиль</b>\n\n"
+        f"Пользователь: <b>{display_user(username, tg_id)}</b>\n"
+        f"Telegram ID: <code>{tg_id}</code>\n\n"
+        f"Статус: <b>{status}</b>\n"
+        f"Активен до: <b>{active_until}</b>\n"
+        f"Осталось: <b>{left}</b>\n"
+        f"Тест: <b>{trial_text}</b>\n"
+        f"В боте с: <b>{created_text}</b>"
     )
 
 
@@ -378,7 +466,7 @@ def admin_users_text(page: int, total: int) -> str:
         "👥 <b>Пользователи</b>\n\n"
         f"Всего: <b>{total}</b>\n"
         f"Страница: <b>{page + 1}/{pages}</b>\n\n"
-        "🟢 есть доступ в базе, ⚪ доступа в базе нет, 🧪 тест уже использован."
+        "🟢 активен, 🟡 истёк, ⚪ доступа нет, 🧪 тест уже использован."
     )
 
 
@@ -430,6 +518,88 @@ async def admin_user_text(tg_id: int) -> str:
         f"{local_text}\n\n"
         f"{marzban_text}"
     )
+
+
+def expiry_notice_kind(
+    expire_at: int,
+    now: int,
+    notice_3d_expire_at: int,
+    notice_1d_expire_at: int,
+    notice_0d_expire_at: int,
+) -> str | None:
+    seconds_left = expire_at - now
+
+    if seconds_left <= 0 and notice_0d_expire_at != expire_at:
+        return "0d"
+    if 0 < seconds_left <= EXPIRY_NOTICE_1D_SECONDS and notice_1d_expire_at != expire_at:
+        return "1d"
+    if EXPIRY_NOTICE_1D_SECONDS < seconds_left <= EXPIRY_NOTICE_3D_SECONDS and notice_3d_expire_at != expire_at:
+        return "3d"
+    return None
+
+
+def expiry_notice_text(notice_kind: str, expire_at: int) -> str:
+    if notice_kind == "0d":
+        return (
+            "⏳ <b>VPN-доступ закончился</b>\n\n"
+            f"Доступ был активен до: <b>{format_date(expire_at)}</b>\n\n"
+            "Нажмите «🚀 Купить VPN», чтобы продлить доступ."
+        )
+
+    if notice_kind == "1d":
+        title = "⏰ <b>VPN заканчивается совсем скоро</b>"
+        lead = "До окончания доступа осталось меньше суток."
+    else:
+        title = "⏰ <b>VPN скоро закончится</b>"
+        lead = f"До окончания доступа осталось: <b>{days_left_text(expire_at)}</b>."
+
+    return (
+        f"{title}\n\n"
+        f"{lead}\n"
+        f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
+        "Продлите доступ заранее, чтобы VPN не отключился."
+    )
+
+
+async def send_expiry_notifications() -> None:
+    now = int(time.time())
+    users = db.list_users_for_expiry_notifications(now)
+
+    for user in users:
+        tg_id, _, expire_at, _, notice_3d, notice_1d, notice_0d = user
+        expire_at = int(expire_at or 0)
+        notice_kind = expiry_notice_kind(
+            expire_at=expire_at,
+            now=now,
+            notice_3d_expire_at=int(notice_3d or 0),
+            notice_1d_expire_at=int(notice_1d or 0),
+            notice_0d_expire_at=int(notice_0d or 0),
+        )
+        if not notice_kind:
+            continue
+
+        try:
+            await bot.send_message(
+                tg_id,
+                expiry_notice_text(notice_kind, expire_at),
+                reply_markup=main_keyboard_for(tg_id),
+            )
+        except Exception:
+            logging.exception("Failed to send expiry notice to %s", tg_id)
+            continue
+
+        db.mark_expiry_notice_sent(tg_id, notice_kind, expire_at)
+
+
+async def expiry_notification_loop() -> None:
+    await asyncio.sleep(20)
+    while True:
+        try:
+            await send_expiry_notifications()
+        except Exception:
+            logging.exception("Expiry notification loop failed")
+
+        await asyncio.sleep(EXPIRY_NOTIFICATION_INTERVAL_SECONDS)
 
 
 async def send_main_menu(message: Message) -> None:
@@ -526,10 +696,10 @@ async def my_key_menu_callback(callback: CallbackQuery):
         "Синхронизация доступа через inline-меню Мой ключ",
     )
 
-    if not user or not user[4]:
+    if not is_local_access_active(user):
         await edit_or_answer(
             callback.message,
-            no_access_text(),
+            no_access_text(user),
             reply_markup=main_keyboard_for(callback.from_user.id),
         )
         await callback.answer()
@@ -539,6 +709,25 @@ async def my_key_menu_callback(callback: CallbackQuery):
         callback.message,
         user_access_text(user),
         reply_markup=key_inline_keyboard(user[4]),
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "menu:profile")
+async def profile_menu_callback(callback: CallbackQuery):
+    if await answer_if_rate_limited(callback):
+        return
+
+    user = await get_user_with_access(
+        callback.from_user.id,
+        callback.from_user.username,
+        "Синхронизация доступа через inline-меню Профиль",
+    )
+
+    await edit_or_answer(
+        callback.message,
+        profile_text(user, callback.from_user.id, callback.from_user.username),
+        reply_markup=profile_inline_keyboard(has_active_access=is_local_access_active(user)),
     )
     await callback.answer()
 
@@ -704,9 +893,9 @@ async def my_key_message_handler(message: Message):
         "Синхронизация доступа через кнопку Мой ключ",
     )
 
-    if not user or not user[4]:
+    if not is_local_access_active(user):
         await message.answer(
-            no_access_text(),
+            no_access_text(user),
             reply_markup=main_keyboard_for(message.from_user.id),
         )
         return
@@ -714,6 +903,23 @@ async def my_key_message_handler(message: Message):
     await message.answer(
         user_access_text(user),
         reply_markup=key_inline_keyboard(user[4]),
+    )
+
+
+@dp.message(F.text == BTN_PROFILE)
+async def profile_message_handler(message: Message):
+    if await message_is_rate_limited(message):
+        return
+
+    user = await get_user_with_access(
+        message.from_user.id,
+        message.from_user.username,
+        "Синхронизация доступа через кнопку Профиль",
+    )
+
+    await message.answer(
+        profile_text(user, message.from_user.id, message.from_user.username),
+        reply_markup=profile_inline_keyboard(has_active_access=is_local_access_active(user)),
     )
 
 
@@ -765,7 +971,7 @@ async def show_key_callback(callback: CallbackQuery):
         "Синхронизация доступа через кнопку Показать ссылку",
     )
 
-    if not user or not user[4]:
+    if not is_local_access_active(user):
         await callback.answer("Активный доступ не найден.", show_alert=True)
         return
 
@@ -965,6 +1171,7 @@ async def unknown_message(message: Message):
 async def main():
     validate_settings()
     db.init_db()
+    asyncio.create_task(expiry_notification_loop())
     logging.info("Karipuza VPN Bot started")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 

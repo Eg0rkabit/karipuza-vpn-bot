@@ -1,5 +1,6 @@
 BTN_BUY = "🚀 Купить VPN"
 BTN_MY_KEY = "🔑 Мой ключ"
+BTN_PROFILE = "👤 Профиль"
 BTN_INSTRUCTION = "📲 Инструкция"
 BTN_SUPPORT = "💬 Поддержка"
 BTN_MENU = "🏠 Главное меню"

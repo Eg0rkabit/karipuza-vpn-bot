@@ -40,6 +40,9 @@ def init_db() -> None:
     ensure_column(cur, "users", "trial_used", "INTEGER DEFAULT 0")
     ensure_column(cur, "users", "created_at", "INTEGER DEFAULT 0")
     ensure_column(cur, "users", "updated_at", "INTEGER DEFAULT 0")
+    ensure_column(cur, "users", "notice_3d_expire_at", "INTEGER DEFAULT 0")
+    ensure_column(cur, "users", "notice_1d_expire_at", "INTEGER DEFAULT 0")
+    ensure_column(cur, "users", "notice_0d_expire_at", "INTEGER DEFAULT 0")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS purchases (
@@ -128,22 +131,43 @@ def save_vpn_user(
 
     conn = connect()
     cur = conn.cursor()
-    cur.execute("""
-        INSERT OR REPLACE INTO users (
-            tg_id, tg_username, marzban_username, expire_at, vpn_link,
-            trial_used, created_at, updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        tg_id,
-        tg_username,
-        marzban_username,
-        expire_at,
-        vpn_link,
-        1 if trial_used else 0,
-        created_at,
-        now,
-    ))
+
+    if old:
+        cur.execute("""
+            UPDATE users
+            SET tg_username = COALESCE(?, tg_username),
+                marzban_username = ?,
+                expire_at = ?,
+                vpn_link = ?,
+                trial_used = ?,
+                updated_at = ?
+            WHERE tg_id = ?
+        """, (
+            tg_username,
+            marzban_username,
+            expire_at,
+            vpn_link,
+            1 if trial_used else 0,
+            now,
+            tg_id,
+        ))
+    else:
+        cur.execute("""
+            INSERT INTO users (
+                tg_id, tg_username, marzban_username, expire_at, vpn_link,
+                trial_used, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            tg_id,
+            tg_username,
+            marzban_username,
+            expire_at,
+            vpn_link,
+            1 if trial_used else 0,
+            created_at,
+            now,
+        ))
     conn.commit()
     conn.close()
 
@@ -209,5 +233,39 @@ def clear_user_key(tg_id: int) -> None:
         SET vpn_link = NULL, expire_at = 0, updated_at = ?
         WHERE tg_id = ?
     """, (now, tg_id))
+    conn.commit()
+    conn.close()
+
+
+def list_users_for_expiry_notifications(now: int):
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT tg_id, tg_username, expire_at, vpn_link,
+               notice_3d_expire_at, notice_1d_expire_at, notice_0d_expire_at
+        FROM users
+        WHERE vpn_link IS NOT NULL
+          AND vpn_link != ''
+          AND expire_at > 0
+          AND expire_at <= ?
+    """, (now + 3 * 86400,))
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+def mark_expiry_notice_sent(tg_id: int, notice_kind: str, expire_at: int) -> None:
+    columns = {
+        "3d": "notice_3d_expire_at",
+        "1d": "notice_1d_expire_at",
+        "0d": "notice_0d_expire_at",
+    }
+    column = columns.get(notice_kind)
+    if not column:
+        raise ValueError(f"Unknown expiry notice kind: {notice_kind}")
+
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute(f"UPDATE users SET {column} = ? WHERE tg_id = ?", (expire_at, tg_id))
     conn.commit()
     conn.close()
