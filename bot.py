@@ -450,24 +450,23 @@ async def my_key_message_handler(message: Message):
     db.ensure_user(message.from_user.id, message.from_user.username)
 
     user = db.get_user(message.from_user.id)
-    if not user or not user[4]:
-        try:
-            synced = await sync_active_user_from_marzban(
-                message.from_user.id,
-                message.from_user.username,
-            )
-        except MarzbanError as e:
-            logging.exception("Failed to sync user %s from Marzban", message.from_user.id)
-            await notify_admins_about_error(
-                e,
-                action="Синхронизация доступа через кнопку Мой ключ",
-                tg_id=message.from_user.id,
-                username=message.from_user.username,
-            )
-            synced = False
+    try:
+        synced = await sync_active_user_from_marzban(
+            message.from_user.id,
+            message.from_user.username,
+        )
+    except MarzbanError as e:
+        logging.exception("Failed to sync user %s from Marzban", message.from_user.id)
+        await notify_admins_about_error(
+            e,
+            action="Синхронизация доступа через кнопку Мой ключ",
+            tg_id=message.from_user.id,
+            username=message.from_user.username,
+        )
+        synced = False
 
-        if synced:
-            user = db.get_user(message.from_user.id)
+    if synced:
+        user = db.get_user(message.from_user.id)
 
     if not user or not user[4]:
         await message.answer(
@@ -536,24 +535,23 @@ async def show_key_callback(callback: CallbackQuery):
     db.ensure_user(callback.from_user.id, callback.from_user.username)
 
     user = db.get_user(callback.from_user.id)
-    if not user or not user[4]:
-        try:
-            synced = await sync_active_user_from_marzban(
-                callback.from_user.id,
-                callback.from_user.username,
-            )
-        except MarzbanError as e:
-            logging.exception("Failed to sync user %s from Marzban", callback.from_user.id)
-            await notify_admins_about_error(
-                e,
-                action="Синхронизация доступа через кнопку Показать ссылку",
-                tg_id=callback.from_user.id,
-                username=callback.from_user.username,
-            )
-            synced = False
+    try:
+        synced = await sync_active_user_from_marzban(
+            callback.from_user.id,
+            callback.from_user.username,
+        )
+    except MarzbanError as e:
+        logging.exception("Failed to sync user %s from Marzban", callback.from_user.id)
+        await notify_admins_about_error(
+            e,
+            action="Синхронизация доступа через кнопку Показать ссылку",
+            tg_id=callback.from_user.id,
+            username=callback.from_user.username,
+        )
+        synced = False
 
-        if synced:
-            user = db.get_user(callback.from_user.id)
+    if synced:
+        user = db.get_user(callback.from_user.id)
 
     if not user or not user[4]:
         await callback.answer("Активный доступ не найден.", show_alert=True)
