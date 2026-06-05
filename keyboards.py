@@ -32,6 +32,23 @@ def main_reply_keyboard(include_admin: bool = False) -> ReplyKeyboardMarkup:
     )
 
 
+def main_menu_inline_keyboard(include_admin: bool = False) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text=BTN_BUY, callback_data="menu:buy"),
+            InlineKeyboardButton(text=BTN_MY_KEY, callback_data="menu:key"),
+        ],
+        [
+            InlineKeyboardButton(text=BTN_INSTRUCTION, callback_data="instruction"),
+            InlineKeyboardButton(text=BTN_SUPPORT, callback_data="support"),
+        ],
+    ]
+    if include_admin:
+        rows.append([InlineKeyboardButton(text=BTN_ADMIN, callback_data="admin:home")])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def tariffs_inline_keyboard(trial_available: bool) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
 
@@ -152,4 +169,5 @@ def support_inline_keyboard() -> InlineKeyboardMarkup:
     support = settings.support_username.replace("@", "")
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Написать в поддержку", url=f"https://t.me/{support}")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")],
     ])

@@ -24,7 +24,7 @@ from keyboards import (
     admin_user_inline_keyboard,
     admin_users_keyboard,
     key_inline_keyboard,
-    main_reply_keyboard,
+    main_menu_inline_keyboard,
     support_inline_keyboard,
     tariffs_inline_keyboard,
 )
@@ -74,7 +74,7 @@ def is_admin(user_id: int) -> bool:
 
 
 def main_keyboard_for(user_id: int):
-    return main_reply_keyboard(include_admin=is_admin(user_id))
+    return main_menu_inline_keyboard(include_admin=is_admin(user_id))
 
 
 def format_date(timestamp: int) -> str:
@@ -320,6 +320,49 @@ async def sync_active_user_from_marzban(tg_id: int, tg_username: str | None) -> 
     return True
 
 
+async def get_user_with_access(tg_id: int, tg_username: str | None, action: str):
+    db.ensure_user(tg_id, tg_username)
+
+    user = db.get_user(tg_id)
+    try:
+        synced = await sync_active_user_from_marzban(tg_id, tg_username)
+    except MarzbanError as e:
+        logging.exception("Failed to sync user %s from Marzban", tg_id)
+        await notify_admins_about_error(
+            e,
+            action=action,
+            tg_id=tg_id,
+            username=tg_username,
+        )
+        synced = False
+
+    if synced:
+        user = db.get_user(tg_id)
+
+    return user
+
+
+def no_access_text() -> str:
+    return (
+        "У вас пока нет активного VPN-доступа.\n\n"
+        "Нажмите «🚀 Купить VPN», чтобы получить доступ. "
+        "Если админ уже включил доступ вручную, попробуйте ещё раз через минуту."
+    )
+
+
+def user_access_text(user) -> str:
+    tg_id, tg_username, _, expire_at, vpn_link, _, _, _ = user
+    subscription_help = f"\n\n{SUBSCRIPTION_HELP_TEXT}" if is_subscription_link(vpn_link) else ""
+
+    return (
+        f"🔑 <b>Мой ключ</b>\n\n"
+        f"Пользователь: <b>{display_user(tg_username, tg_id)}</b>\n"
+        f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
+        f"Нажмите кнопку ниже, чтобы получить ссылку подключения."
+        f"{subscription_help}"
+    )
+
+
 def admin_home_text() -> str:
     total = db.count_users()
     return (
@@ -454,6 +497,63 @@ async def admin_server_callback(callback: CallbackQuery):
         await server_status_text(),
         reply_markup=admin_server_status_keyboard(),
     )
+
+
+@dp.callback_query(F.data == "menu:buy")
+async def buy_menu_callback(callback: CallbackQuery):
+    if await answer_if_rate_limited(callback):
+        return
+
+    db.ensure_user(callback.from_user.id, callback.from_user.username)
+    trial_available = not db.has_used_trial(callback.from_user.id)
+
+    await edit_or_answer(
+        callback.message,
+        "Выберите тариф:",
+        reply_markup=tariffs_inline_keyboard(trial_available=trial_available),
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "menu:key")
+async def my_key_menu_callback(callback: CallbackQuery):
+    if await answer_if_rate_limited(callback):
+        return
+
+    user = await get_user_with_access(
+        callback.from_user.id,
+        callback.from_user.username,
+        "Синхронизация доступа через inline-меню Мой ключ",
+    )
+
+    if not user or not user[4]:
+        await edit_or_answer(
+            callback.message,
+            no_access_text(),
+            reply_markup=main_keyboard_for(callback.from_user.id),
+        )
+        await callback.answer()
+        return
+
+    await edit_or_answer(
+        callback.message,
+        user_access_text(user),
+        reply_markup=key_inline_keyboard(user[4]),
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "support")
+async def support_callback(callback: CallbackQuery):
+    if await answer_if_rate_limited(callback):
+        return
+
+    await edit_or_answer(
+        callback.message,
+        "💬 <b>Поддержка Karipuza VPN</b>\n\nЕсли нужна помощь с подключением или оплатой, напишите админу.",
+        reply_markup=support_inline_keyboard(),
+    )
+    await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("admin:users:"))
@@ -598,46 +698,22 @@ async def my_key_message_handler(message: Message):
     if await message_is_rate_limited(message):
         return
 
-    db.ensure_user(message.from_user.id, message.from_user.username)
-
-    user = db.get_user(message.from_user.id)
-    try:
-        synced = await sync_active_user_from_marzban(
-            message.from_user.id,
-            message.from_user.username,
-        )
-    except MarzbanError as e:
-        logging.exception("Failed to sync user %s from Marzban", message.from_user.id)
-        await notify_admins_about_error(
-            e,
-            action="Синхронизация доступа через кнопку Мой ключ",
-            tg_id=message.from_user.id,
-            username=message.from_user.username,
-        )
-        synced = False
-
-    if synced:
-        user = db.get_user(message.from_user.id)
+    user = await get_user_with_access(
+        message.from_user.id,
+        message.from_user.username,
+        "Синхронизация доступа через кнопку Мой ключ",
+    )
 
     if not user or not user[4]:
         await message.answer(
-            "У вас пока нет активного VPN-доступа.\n\n"
-            "Нажмите «🚀 Купить VPN», чтобы получить доступ. "
-            "Если админ уже включил доступ вручную, попробуйте ещё раз через минуту.",
+            no_access_text(),
             reply_markup=main_keyboard_for(message.from_user.id),
         )
         return
 
-    tg_id, tg_username, _, expire_at, vpn_link, _, _, _ = user
-    subscription_help = f"\n\n{SUBSCRIPTION_HELP_TEXT}" if is_subscription_link(vpn_link) else ""
-
     await message.answer(
-        f"🔑 <b>Мой ключ</b>\n\n"
-        f"Пользователь: <b>{display_user(tg_username, tg_id)}</b>\n"
-        f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
-        f"Нажмите кнопку ниже, чтобы получить ссылку подключения."
-        f"{subscription_help}",
-        reply_markup=key_inline_keyboard(vpn_link),
+        user_access_text(user),
+        reply_markup=key_inline_keyboard(user[4]),
     )
 
 
@@ -665,7 +741,7 @@ async def back_main_callback(callback: CallbackQuery):
     if await answer_if_rate_limited(callback):
         return
 
-    await callback.message.answer(WELCOME_TEXT, reply_markup=main_keyboard_for(callback.from_user.id))
+    await edit_or_answer(callback.message, WELCOME_TEXT, reply_markup=main_keyboard_for(callback.from_user.id))
     await callback.answer()
 
 
@@ -674,7 +750,7 @@ async def instruction_callback(callback: CallbackQuery):
     if await answer_if_rate_limited(callback):
         return
 
-    await callback.message.answer(INSTRUCTION_TEXT, reply_markup=main_keyboard_for(callback.from_user.id))
+    await edit_or_answer(callback.message, INSTRUCTION_TEXT, reply_markup=main_keyboard_for(callback.from_user.id))
     await callback.answer()
 
 
@@ -683,26 +759,11 @@ async def show_key_callback(callback: CallbackQuery):
     if await answer_if_rate_limited(callback):
         return
 
-    db.ensure_user(callback.from_user.id, callback.from_user.username)
-
-    user = db.get_user(callback.from_user.id)
-    try:
-        synced = await sync_active_user_from_marzban(
-            callback.from_user.id,
-            callback.from_user.username,
-        )
-    except MarzbanError as e:
-        logging.exception("Failed to sync user %s from Marzban", callback.from_user.id)
-        await notify_admins_about_error(
-            e,
-            action="Синхронизация доступа через кнопку Показать ссылку",
-            tg_id=callback.from_user.id,
-            username=callback.from_user.username,
-        )
-        synced = False
-
-    if synced:
-        user = db.get_user(callback.from_user.id)
+    user = await get_user_with_access(
+        callback.from_user.id,
+        callback.from_user.username,
+        "Синхронизация доступа через кнопку Показать ссылку",
+    )
 
     if not user or not user[4]:
         await callback.answer("Активный доступ не найден.", show_alert=True)
@@ -710,11 +771,13 @@ async def show_key_callback(callback: CallbackQuery):
 
     vpn_link = user[4]
     title = "Ваша VPN-подписка" if is_subscription_link(vpn_link) else "Ваш VPN-ключ"
-    await callback.message.answer(
+    await edit_or_answer(
+        callback.message,
         f"📄 <b>{title}</b>\n\n"
         "Telegram не умеет скрыто копировать очень длинные ссылки, "
         "поэтому скопируйте строку ниже вручную:\n\n"
-        f"<code>{html.escape(vpn_link)}</code>"
+        f"<code>{html.escape(vpn_link)}</code>",
+        reply_markup=main_keyboard_for(callback.from_user.id),
     )
     await callback.answer()
 
@@ -741,7 +804,8 @@ async def tariff_callback(callback: CallbackQuery):
 
     if is_trial and db.has_used_trial(callback.from_user.id):
         await callback.answer("Тестовый период уже использован.", show_alert=True)
-        await callback.message.answer(
+        await edit_or_answer(
+            callback.message,
             "Тестовый период уже использован.\n\nВыберите обычный тариф:",
             reply_markup=tariffs_inline_keyboard(trial_available=False),
         )
@@ -750,7 +814,7 @@ async def tariff_callback(callback: CallbackQuery):
     active_key_requests.add(callback.from_user.id)
     try:
         await callback.answer("Готовлю доступ...")
-        await callback.message.answer("⏳ Готовлю ваш VPN-доступ...")
+        await edit_or_answer(callback.message, "⏳ Готовлю ваш VPN-доступ...")
 
         marzban_username, expire_at, vpn_link = await create_or_update_user(
             tg_id=callback.from_user.id,
@@ -774,7 +838,8 @@ async def tariff_callback(callback: CallbackQuery):
             status="auto_issued",
         )
 
-        await callback.message.answer(
+        await edit_or_answer(
+            callback.message,
             f"✅ <b>Доступ активирован!</b>\n\n"
             f"Тариф: <b>{tariff['title']}</b>\n"
             f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
@@ -804,7 +869,8 @@ async def tariff_callback(callback: CallbackQuery):
             tg_id=callback.from_user.id,
             username=callback.from_user.username,
         )
-        await callback.message.answer(
+        await edit_or_answer(
+            callback.message,
             GENERIC_ERROR_TEXT,
             reply_markup=main_keyboard_for(callback.from_user.id),
         )
@@ -816,7 +882,8 @@ async def tariff_callback(callback: CallbackQuery):
             tg_id=callback.from_user.id,
             username=callback.from_user.username,
         )
-        await callback.message.answer(
+        await edit_or_answer(
+            callback.message,
             GENERIC_ERROR_TEXT,
             reply_markup=main_keyboard_for(callback.from_user.id),
         )
@@ -890,7 +957,7 @@ async def unknown_callback(callback: CallbackQuery):
 @dp.message()
 async def unknown_message(message: Message):
     await message.answer(
-        "Я не понял сообщение. Используйте меню снизу или команду /start.",
+        "Я не понял сообщение. Используйте меню в боте или команду /start.",
         reply_markup=main_keyboard_for(message.from_user.id),
     )
 
