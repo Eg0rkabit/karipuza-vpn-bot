@@ -85,7 +85,15 @@ def admin_user_inline_keyboard(tg_id: int) -> InlineKeyboardMarkup:
 def admin_panel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin:users:0")],
+        [InlineKeyboardButton(text="📊 Статус сервера", callback_data="admin:server")],
         [InlineKeyboardButton(text="🔄 Обновить", callback_data="admin:home")],
+    ])
+
+
+def admin_server_status_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Обновить", callback_data="admin:server")],
+        [InlineKeyboardButton(text="🏠 Админ-меню", callback_data="admin:home")],
     ])
 
 

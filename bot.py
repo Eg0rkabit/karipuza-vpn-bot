@@ -1,6 +1,9 @@
 import asyncio
 import html
 import logging
+import os
+import shutil
+import socket
 import time
 from datetime import datetime
 
@@ -16,6 +19,7 @@ from config import settings, validate_settings
 from keyboards import (
     ADMIN_USERS_PAGE_SIZE,
     admin_panel_keyboard,
+    admin_server_status_keyboard,
     admin_user_manage_keyboard,
     admin_user_inline_keyboard,
     admin_users_keyboard,
@@ -30,6 +34,7 @@ from marzban_api import (
     disable_user,
     enable_user as enable_marzban_user,
     get_active_user,
+    get_token,
     get_user_data,
 )
 from texts import (
@@ -86,6 +91,129 @@ def display_user(username: str | None, tg_id: int) -> str:
 
 def is_subscription_link(vpn_link: str) -> bool:
     return vpn_link.startswith(("http://", "https://"))
+
+
+def format_size(size_bytes: int) -> str:
+    value = float(size_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if value < 1024 or unit == "TB":
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TB"
+
+
+def format_duration(seconds: float) -> str:
+    seconds = int(seconds)
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, _ = divmod(seconds, 60)
+
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days} д")
+    if hours:
+        parts.append(f"{hours} ч")
+    if minutes or not parts:
+        parts.append(f"{minutes} мин")
+    return " ".join(parts)
+
+
+def read_uptime() -> str:
+    try:
+        with open("/proc/uptime", encoding="utf-8") as file:
+            uptime_seconds = float(file.read().split()[0])
+        return format_duration(uptime_seconds)
+    except Exception:
+        return "неизвестно"
+
+
+def read_memory_status() -> str:
+    try:
+        values: dict[str, int] = {}
+        with open("/proc/meminfo", encoding="utf-8") as file:
+            for line in file:
+                key, raw_value = line.split(":", 1)
+                values[key] = int(raw_value.strip().split()[0]) * 1024
+
+        total = values["MemTotal"]
+        available = values.get("MemAvailable", 0)
+        used = max(0, total - available)
+        percent = used / total * 100 if total else 0
+        return f"{format_size(used)} / {format_size(total)} ({percent:.0f}%)"
+    except Exception:
+        return "неизвестно"
+
+
+def read_disk_status() -> str:
+    try:
+        disk = shutil.disk_usage("/")
+        percent = disk.used / disk.total * 100 if disk.total else 0
+        return f"{format_size(disk.used)} / {format_size(disk.total)} ({percent:.0f}%)"
+    except Exception:
+        return "неизвестно"
+
+
+def read_load_status() -> str:
+    try:
+        load_1, load_5, load_15 = os.getloadavg()
+        return f"{load_1:.2f} / {load_5:.2f} / {load_15:.2f}"
+    except Exception:
+        return "неизвестно"
+
+
+def resolve_host(host: str) -> tuple[list[str], str | None]:
+    if not host:
+        return [], "домен не задан"
+
+    try:
+        _, _, addresses = socket.gethostbyname_ex(host)
+    except Exception as e:
+        return [], str(e)
+
+    return sorted(set(addresses)), None
+
+
+async def marzban_status_text() -> str:
+    try:
+        await asyncio.wait_for(get_token(), timeout=8)
+    except Exception as e:
+        return f"❌ ошибка: <code>{short_error_text(e, 500)}</code>"
+
+    return "✅ доступен"
+
+
+async def dns_status_text() -> str:
+    host = settings.subscription_check_host
+    addresses, error = await asyncio.to_thread(resolve_host, host)
+    if error:
+        return f"❌ {html.escape(host)} не найден: <code>{html.escape(error)}</code>"
+
+    expected_ip = settings.public_host
+    addresses_text = ", ".join(addresses)
+    if expected_ip and expected_ip not in addresses:
+        return f"⚠️ {html.escape(host)} → <code>{html.escape(addresses_text)}</code>, ожидали <code>{html.escape(expected_ip)}</code>"
+
+    return f"✅ {html.escape(host)} → <code>{html.escape(addresses_text)}</code>"
+
+
+async def server_status_text() -> str:
+    marzban_status, dns_status = await asyncio.gather(
+        marzban_status_text(),
+        dns_status_text(),
+    )
+
+    return (
+        "📊 <b>Статус сервера</b>\n\n"
+        f"Бот: <b>✅ работает</b>\n"
+        f"Marzban: {marzban_status}\n"
+        f"DNS подписки: {dns_status}\n\n"
+        f"Uptime: <b>{read_uptime()}</b>\n"
+        f"Нагрузка 1/5/15 мин: <b>{read_load_status()}</b>\n"
+        f"RAM: <b>{read_memory_status()}</b>\n"
+        f"Диск: <b>{read_disk_status()}</b>\n"
+        f"Пользователей в базе: <b>{db.count_users()}</b>\n\n"
+        f"Обновлено: <b>{datetime.now().strftime('%d.%m.%Y %H:%M')}</b>"
+    )
 
 
 def parse_callback_parts(data: str, expected: int) -> list[str]:
@@ -295,6 +423,15 @@ async def admin_button_handler(message: Message):
     await message.answer(admin_home_text(), reply_markup=admin_panel_keyboard())
 
 
+@dp.message(Command("status"))
+async def admin_status_handler(message: Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("Нет доступа.")
+        return
+
+    await message.answer(await server_status_text(), reply_markup=admin_server_status_keyboard())
+
+
 @dp.callback_query(F.data == "admin:home")
 async def admin_home_callback(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
@@ -303,6 +440,20 @@ async def admin_home_callback(callback: CallbackQuery):
 
     await edit_or_answer(callback.message, admin_home_text(), reply_markup=admin_panel_keyboard())
     await callback.answer()
+
+
+@dp.callback_query(F.data == "admin:server")
+async def admin_server_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+
+    await callback.answer("Проверяю сервер...")
+    await edit_or_answer(
+        callback.message,
+        await server_status_text(),
+        reply_markup=admin_server_status_keyboard(),
+    )
 
 
 @dp.callback_query(F.data.startswith("admin:users:"))

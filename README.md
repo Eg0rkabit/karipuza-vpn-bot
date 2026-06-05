@@ -17,6 +17,7 @@
 - Кнопка копирования ссылки без показа полной ссылки в сообщении
 - Админ-уведомление
 - Админ-кнопка отключения доступа
+- Админский статус сервера через кнопку в админке или `/status`
 
 ## .env
 
@@ -31,6 +32,7 @@ MARZBAN_INBOUND_TAG=VLESS TCP REALITY
 MARZBAN_INBOUND_TAGS=VLESS TCP REALITY
 PUBLIC_HOST=176.124.220.50
 SUBSCRIPTION_URL_PREFIX=https://vpn.example.com
+SUBSCRIPTION_CHECK_HOST=sub.karipuza.ru
 
 SUPPORT_USERNAME=@your_username
 ```
