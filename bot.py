@@ -48,6 +48,10 @@ logging.basicConfig(level=logging.INFO)
 ACTION_COOLDOWN_SECONDS = 0.8
 HEAVY_ACTION_COOLDOWN_SECONDS = 4.0
 GENERIC_ERROR_TEXT = "❌ Ошибка, обратитесь к админу."
+SUBSCRIPTION_HELP_TEXT = (
+    "Это ссылка подписки: её можно добавить в Hiddify один раз, "
+    "а потом просто обновлять профиль."
+)
 
 user_action_at: dict[int, float] = {}
 heavy_action_at: dict[int, float] = {}
@@ -78,6 +82,10 @@ def display_user(username: str | None, tg_id: int) -> str:
     if username:
         return f"@{username}"
     return f"ID {tg_id}"
+
+
+def is_subscription_link(vpn_link: str) -> bool:
+    return vpn_link.startswith(("http://", "https://"))
 
 
 def parse_callback_parts(data: str, expected: int) -> list[str]:
@@ -199,7 +207,7 @@ def admin_users_text(page: int, total: int) -> str:
         "👥 <b>Пользователи</b>\n\n"
         f"Всего: <b>{total}</b>\n"
         f"Страница: <b>{page + 1}/{pages}</b>\n\n"
-        "🟢 есть ключ в базе, ⚪ ключа в базе нет, 🧪 тест уже использован."
+        "🟢 есть доступ в базе, ⚪ доступа в базе нет, 🧪 тест уже использован."
     )
 
 
@@ -216,7 +224,7 @@ async def admin_user_text(tg_id: int) -> str:
         _, tg_username, marzban_username, expire_at, vpn_link, trial_used, created_at, updated_at = user
         local_text = (
             "Локально в боте:\n"
-            f"• Ключ: <b>{'есть' if vpn_link else 'нет'}</b>\n"
+            f"• Ссылка доступа: <b>{'есть' if vpn_link else 'нет'}</b>\n"
             f"• Активен до: <b>{format_date(expire_at)}</b>\n"
             f"• Тест: <b>{'использован' if trial_used else 'не использован'}</b>\n"
             f"• Обновлён: <b>{format_date(updated_at)}</b>"
@@ -233,12 +241,14 @@ async def admin_user_text(tg_id: int) -> str:
             remote_status = html.escape(str(marzban_user.get("status") or "unknown"))
             remote_expire = int(marzban_user.get("expire") or 0)
             remote_links = marzban_user.get("links") or []
+            remote_subscription = marzban_user.get("subscription_url")
             marzban_text = (
                 "Marzban:\n"
                 f"• Username: <code>{html.escape(str(marzban_user.get('username') or marzban_username))}</code>\n"
                 f"• Статус: <b>{remote_status}</b>\n"
                 f"• Активен до: <b>{format_date(remote_expire)}</b>\n"
-                f"• Links: <b>{'есть' if remote_links else 'нет'}</b>"
+                f"• Подписка: <b>{'есть' if remote_subscription else 'нет'}</b>\n"
+                f"• Ключи: <b>{'есть' if remote_links else 'нет'}</b>"
             )
 
     return (
@@ -356,7 +366,7 @@ async def admin_sync_user_callback(callback: CallbackQuery):
         return
 
     if not synced:
-        await callback.answer("Активный ключ в Marzban не найден.", show_alert=True)
+        await callback.answer("Активный доступ в Marzban не найден.", show_alert=True)
     else:
         await callback.answer("Синхронизировано.")
 
@@ -450,7 +460,7 @@ async def my_key_message_handler(message: Message):
             logging.exception("Failed to sync user %s from Marzban", message.from_user.id)
             await notify_admins_about_error(
                 e,
-                action="Синхронизация ключа через кнопку Мой ключ",
+                action="Синхронизация доступа через кнопку Мой ключ",
                 tg_id=message.from_user.id,
                 username=message.from_user.username,
             )
@@ -461,20 +471,22 @@ async def my_key_message_handler(message: Message):
 
     if not user or not user[4]:
         await message.answer(
-            "У вас пока нет активного VPN-ключа.\n\n"
+            "У вас пока нет активного VPN-доступа.\n\n"
             "Нажмите «🚀 Купить VPN», чтобы получить доступ. "
-            "Если админ уже включил ключ вручную, попробуйте ещё раз через минуту.",
+            "Если админ уже включил доступ вручную, попробуйте ещё раз через минуту.",
             reply_markup=main_keyboard_for(message.from_user.id),
         )
         return
 
     tg_id, tg_username, _, expire_at, vpn_link, _, _, _ = user
+    subscription_help = f"\n\n{SUBSCRIPTION_HELP_TEXT}" if is_subscription_link(vpn_link) else ""
 
     await message.answer(
         f"🔑 <b>Мой ключ</b>\n\n"
         f"Пользователь: <b>{display_user(tg_username, tg_id)}</b>\n"
         f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
-        f"Нажмите кнопку ниже, чтобы получить ключ.",
+        f"Нажмите кнопку ниже, чтобы получить ссылку подключения."
+        f"{subscription_help}",
         reply_markup=key_inline_keyboard(vpn_link),
     )
 
@@ -534,7 +546,7 @@ async def show_key_callback(callback: CallbackQuery):
             logging.exception("Failed to sync user %s from Marzban", callback.from_user.id)
             await notify_admins_about_error(
                 e,
-                action="Синхронизация ключа через кнопку Показать ключ",
+                action="Синхронизация доступа через кнопку Показать ссылку",
                 tg_id=callback.from_user.id,
                 username=callback.from_user.username,
             )
@@ -544,13 +556,14 @@ async def show_key_callback(callback: CallbackQuery):
             user = db.get_user(callback.from_user.id)
 
     if not user or not user[4]:
-        await callback.answer("Активный ключ не найден.", show_alert=True)
+        await callback.answer("Активный доступ не найден.", show_alert=True)
         return
 
     vpn_link = user[4]
+    title = "Ваша VPN-подписка" if is_subscription_link(vpn_link) else "Ваш VPN-ключ"
     await callback.message.answer(
-        "📄 <b>Ваш VPN-ключ</b>\n\n"
-        "Telegram не умеет скрыто копировать очень длинные ключи, "
+        f"📄 <b>{title}</b>\n\n"
+        "Telegram не умеет скрыто копировать очень длинные ссылки, "
         "поэтому скопируйте строку ниже вручную:\n\n"
         f"<code>{html.escape(vpn_link)}</code>"
     )
@@ -560,7 +573,7 @@ async def show_key_callback(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("tariff:"))
 async def tariff_callback(callback: CallbackQuery):
     if callback.from_user.id in active_key_requests:
-        await callback.answer("Ключ уже создаётся, подождите.", show_alert=True)
+        await callback.answer("Доступ уже создаётся, подождите.", show_alert=True)
         return
 
     if await answer_if_rate_limited(callback, HEAVY_ACTION_COOLDOWN_SECONDS, heavy=True):
@@ -587,8 +600,8 @@ async def tariff_callback(callback: CallbackQuery):
 
     active_key_requests.add(callback.from_user.id)
     try:
-        await callback.answer("Создаю ключ...")
-        await callback.message.answer("⏳ Создаю ваш VPN-ключ...")
+        await callback.answer("Готовлю доступ...")
+        await callback.message.answer("⏳ Готовлю ваш VPN-доступ...")
 
         marzban_username, expire_at, vpn_link = await create_or_update_user(
             tg_id=callback.from_user.id,
@@ -616,7 +629,7 @@ async def tariff_callback(callback: CallbackQuery):
             f"✅ <b>Доступ активирован!</b>\n\n"
             f"Тариф: <b>{tariff['title']}</b>\n"
             f"Активен до: <b>{format_date(expire_at)}</b>\n\n"
-            f"🔑 Нажмите кнопку ниже, чтобы получить ключ.\n"
+            f"🔑 Нажмите кнопку ниже, чтобы получить ссылку подключения.\n"
             f"📲 Если не знаете, как подключиться — откройте инструкцию.",
             reply_markup=key_inline_keyboard(vpn_link),
         )
@@ -638,7 +651,7 @@ async def tariff_callback(callback: CallbackQuery):
     except MarzbanError as e:
         await notify_admins_about_error(
             e,
-            action=f"Создание VPN-ключа, тариф {tariff['title']}",
+            action=f"Создание VPN-доступа, тариф {tariff['title']}",
             tg_id=callback.from_user.id,
             username=callback.from_user.username,
         )
@@ -650,7 +663,7 @@ async def tariff_callback(callback: CallbackQuery):
         logging.exception("Unknown error while creating VPN key")
         await notify_admins_about_error(
             e,
-            action=f"Неизвестная ошибка при создании VPN-ключа, тариф {tariff['title']}",
+            action=f"Неизвестная ошибка при создании VPN-доступа, тариф {tariff['title']}",
             tg_id=callback.from_user.id,
             username=callback.from_user.username,
         )

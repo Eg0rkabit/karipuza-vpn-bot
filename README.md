@@ -12,8 +12,9 @@
 - `💬 Поддержка`
 - Тест 1 день
 - Тест можно получить только один раз
-- Автоматическая выдача ключа через Marzban
-- Кнопка копирования ключа без показа полного ключа в сообщении
+- Автоматическая выдача доступа через Marzban
+- Выдача ссылки подписки Marzban, если она настроена
+- Кнопка копирования ссылки без показа полной ссылки в сообщении
 - Админ-уведомление
 - Админ-кнопка отключения доступа
 
@@ -27,10 +28,20 @@ MARZBAN_URL=http://127.0.0.1:8000
 MARZBAN_USERNAME=логин_Marzban
 MARZBAN_PASSWORD=пароль_Marzban
 MARZBAN_INBOUND_TAG=VLESS TCP REALITY
+MARZBAN_INBOUND_TAGS=VLESS TCP REALITY
 PUBLIC_HOST=176.124.220.50
+SUBSCRIPTION_URL_PREFIX=https://vpn.example.com
 
 SUPPORT_USERNAME=@your_username
 ```
+
+Если нужно включить в подписку несколько Reality inbound, укажите их через запятую:
+
+```env
+MARZBAN_INBOUND_TAGS=VLESS TCP REALITY,VLESS TCP REALITY APPLE TEST
+```
+
+Для подписок Marzban должен отдавать внешний HTTPS-адрес. Обычно это настраивается в `/opt/marzban/.env` через `XRAY_SUBSCRIPTION_URL_PREFIX`.
 
 ## Запуск
 

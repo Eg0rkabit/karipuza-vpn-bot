@@ -13,6 +13,10 @@ COPY_TEXT_MAX_LENGTH = 256
 ADMIN_USERS_PAGE_SIZE = 8
 
 
+def is_subscription_link(vpn_link: str) -> bool:
+    return vpn_link.startswith(("http://", "https://"))
+
+
 def main_reply_keyboard(include_admin: bool = False) -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text=BTN_BUY), KeyboardButton(text=BTN_MY_KEY)],
@@ -47,22 +51,27 @@ def tariffs_inline_keyboard(trial_available: bool) -> InlineKeyboardMarkup:
 
 
 def key_inline_keyboard(vpn_link: str) -> InlineKeyboardMarkup:
+    is_subscription = is_subscription_link(vpn_link)
+    rows: list[list[InlineKeyboardButton]] = []
+
     if len(vpn_link) <= COPY_TEXT_MAX_LENGTH:
         key_button = InlineKeyboardButton(
-            text="📋 Скопировать ключ",
+            text="📋 Скопировать ссылку" if is_subscription else "📋 Скопировать ключ",
             copy_text=CopyTextButton(text=vpn_link),
         )
     else:
         key_button = InlineKeyboardButton(
-            text="📄 Показать ключ",
+            text="📄 Показать ссылку" if is_subscription else "📄 Показать ключ",
             callback_data="show_key",
         )
 
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [key_button],
-        [InlineKeyboardButton(text="📲 Инструкция", callback_data="instruction")],
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")],
-    ])
+    rows.append([key_button])
+    if is_subscription:
+        rows.append([InlineKeyboardButton(text="🌐 Открыть подписку", url=vpn_link)])
+    rows.append([InlineKeyboardButton(text="📲 Инструкция", callback_data="instruction")])
+    rows.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_user_inline_keyboard(tg_id: int) -> InlineKeyboardMarkup:

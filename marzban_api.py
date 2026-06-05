@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -60,17 +61,50 @@ def fix_vless_host(link: str) -> str:
         return link
 
 
+def is_public_subscription_url(link: str) -> bool:
+    try:
+        parsed = urlsplit(link)
+    except Exception:
+        return False
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+
+    return parsed.hostname not in {"127.0.0.1", "localhost", "0.0.0.0"}
+
+
+def fix_subscription_url(link: str) -> str:
+    link = link.strip()
+    if not link:
+        return link
+
+    if settings.subscription_url_prefix:
+        if link.startswith("/"):
+            return f"{settings.subscription_url_prefix}{link}"
+
+        parsed = urlsplit(link)
+        path = parsed.path or ""
+        query = f"?{parsed.query}" if parsed.query else ""
+        fragment = f"#{parsed.fragment}" if parsed.fragment else ""
+        if path:
+            return f"{settings.subscription_url_prefix}{path}{query}{fragment}"
+
+    return link
+
+
 def extract_link(user_data: dict) -> str:
+    subscription_url = user_data.get("subscription_url")
+    if subscription_url:
+        link = fix_subscription_url(str(subscription_url))
+        if link and is_public_subscription_url(link):
+            return link
+
     links = user_data.get("links") or []
     if links:
         return fix_vless_host(str(links[0]))
 
-    subscription_url = user_data.get("subscription_url")
-    if subscription_url:
-        return str(subscription_url)
-
     raise MarzbanError(
-        "Marzban не вернул links. Проверь MARZBAN_INBOUND_TAG и inbound в Marzban."
+        "Marzban не вернул subscription_url или links. Проверь MARZBAN_INBOUND_TAGS и inbound в Marzban."
     )
 
 
@@ -153,7 +187,7 @@ async def create_or_update_user(tg_id: int, days: int, data_limit_gb: int = 0) -
             "vless": {}
         },
         "inbounds": {
-            "vless": [settings.marzban_inbound_tag]
+            "vless": settings.marzban_inbound_tags
         },
         "expire": expire_at,
         "data_limit": data_limit,
