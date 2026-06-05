@@ -104,6 +104,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin:users:0")],
         [InlineKeyboardButton(text="📊 Статус сервера", callback_data="admin:server")],
         [InlineKeyboardButton(text="🔄 Обновить", callback_data="admin:home")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")],
     ])
 
 
@@ -111,6 +112,7 @@ def admin_server_status_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔄 Обновить", callback_data="admin:server")],
         [InlineKeyboardButton(text="🏠 Админ-меню", callback_data="admin:home")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")],
     ])
 
 
@@ -137,7 +139,10 @@ def admin_users_keyboard(users: list[tuple], page: int, total: int) -> InlineKey
     if nav:
         rows.append(nav)
 
-    rows.append([InlineKeyboardButton(text="🏠 Админ-меню", callback_data="admin:home")])
+    rows.append([
+        InlineKeyboardButton(text="🏠 Админ-меню", callback_data="admin:home"),
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main"),
+    ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -162,6 +167,7 @@ def admin_user_manage_keyboard(tg_id: int, page: int = 0) -> InlineKeyboardMarku
             InlineKeyboardButton(text="👑 365 дней", callback_data=f"admin:issue:{tg_id}:year_1:{page}"),
         ],
         [InlineKeyboardButton(text="← К списку", callback_data=f"admin:users:{page}")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_main")],
     ])
 
 
