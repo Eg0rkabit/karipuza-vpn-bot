@@ -34,8 +34,13 @@ set_env_value() {
 }
 
 restart_marzban() {
-  if command -v marzban >/dev/null 2>&1; then
-    marzban restart
+  if [ -f /opt/marzban/docker-compose.yml ]; then
+    (cd /opt/marzban && docker compose up -d --force-recreate)
+    return
+  fi
+
+  if [ -f /opt/marzban/docker-compose.yaml ]; then
+    (cd /opt/marzban && docker compose up -d --force-recreate)
     return
   fi
 
@@ -44,8 +49,8 @@ restart_marzban() {
     return
   fi
 
-  if [ -f /opt/marzban/docker-compose.yml ]; then
-    docker compose -f /opt/marzban/docker-compose.yml restart
+  if command -v marzban >/dev/null 2>&1; then
+    marzban restart
     return
   fi
 
