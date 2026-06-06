@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-sub.karipuza.ru}"
-PORT="${PORT:-8443}"
+PORT="${PORT:-9443}"
 MARZBAN_UPSTREAM="${MARZBAN_UPSTREAM:-http://127.0.0.1:8000}"
 MARZBAN_ENV="${MARZBAN_ENV:-/opt/marzban/.env}"
 BOT_ENV="${BOT_ENV:-/opt/karipuza-bot/.env}"
@@ -109,6 +109,12 @@ fi
 
 certbot "${certbot_args[@]}"
 
+if ss -H -ltn "sport = :${PORT}" | grep -q .; then
+  echo "Port ${PORT} is already in use. Choose another PORT before continuing."
+  ss -ltnp "sport = :${PORT}" || true
+  exit 1
+fi
+
 echo "==> Writing nginx subscription proxy"
 cat >"$NGINX_SITE" <<NGINX
 server {
@@ -194,7 +200,20 @@ if systemctl list-unit-files --no-pager 2>/dev/null | grep -q '^karipuza-bot\.se
 fi
 
 echo "==> Checking HTTPS endpoint"
-curl -sS -o /dev/null -w "HTTPS check: %{http_code}\n" "${SUBSCRIPTION_URL}/sub/not-a-real-token"
+http_code="000"
+for _ in $(seq 1 30); do
+  http_code="$(curl -sS -o /dev/null -w "%{http_code}" "${SUBSCRIPTION_URL}/sub/not-a-real-token" || true)"
+  if [ "$http_code" != "000" ] && [ "$http_code" != "502" ] && [ "$http_code" != "503" ]; then
+    break
+  fi
+  sleep 2
+done
+
+echo "HTTPS check: ${http_code}"
+if [ "$http_code" = "000" ] || [ "$http_code" = "502" ] || [ "$http_code" = "503" ]; then
+  echo "Subscription endpoint is not ready."
+  exit 1
+fi
 
 echo
 echo "Done."
