@@ -1,13 +1,27 @@
 [Unit]
 Description=Karipuza VPN Telegram Bot
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
-User=root
+Type=simple
+User=karipuza
+Group=karipuza
 WorkingDirectory=/opt/karipuza-bot
-ExecStart=/opt/karipuza-bot/venv/bin/python3 /opt/karipuza-bot/bot.py
-Restart=always
+ExecStart=/opt/karipuza-bot/venv/bin/python3 -m karipuza_bot.main
+Environment=PYTHONDONTWRITEBYTECODE=1
+Restart=on-failure
 RestartSec=5
+TimeoutStopSec=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/opt/karipuza-bot/data
 
 [Install]
 WantedBy=multi-user.target

@@ -1,86 +1,76 @@
 # Karipuza VPN Bot
 
-Бот для выдачи VPN-доступа через Marzban. Основное меню работает через inline-кнопки:
-пользователь нажимает кнопки, а бот обновляет текущее сообщение вместо того, чтобы засорять чат.
+Telegram-бот для продажи и управления VPN-подписками через Remnawave.
 
-## Что умеет
+## Возможности
 
-- `/start`
-- `🚀 Купить VPN`
-- `🔗 Моя подписка`
-- `👤 Профиль`
-- `📲 Инструкция`
-- `💬 Поддержка`
-- Тест 1 день
-- Тест можно получить только один раз
-- Автоматическая выдача доступа через Marzban
-- Выдача ссылки подписки Marzban, если она настроена, с запасной прямой ссылкой доступа
-- Кнопка копирования ссылки без показа полной ссылки в сообщении
-- Напоминания пользователю за 3 дня, за 1 день и после окончания доступа
-- Админ-уведомление
-- Админ-кнопка отключения доступа
-- Админский статус сервера через кнопку в админке или `/status`
-- Старые текстовые кнопки поддерживаются как запасной вариант
+- единое inline-меню без лишних сообщений;
+- тарифы на 1, 3, 6 и 12 месяцев;
+- ручная проверка оплаты по чеку;
+- автоматическое создание и продление подписки в Remnawave;
+- ссылка и QR-код подписки для Happ;
+- встроенная поддержка с обращениями и ответами администратора;
+- админ-панель с платежами, пользователями и состоянием Remnawave;
+- защита от частого нажатия кнопок;
+- подробные ошибки отправляются администраторам, пользователю показывается простой текст.
 
-## .env
+## Структура
+
+```text
+bot.py                    точка запуска
+karipuza_bot/config.py    настройки и тарифы
+karipuza_bot/database.py  SQLite: пользователи, заказы, тикеты
+karipuza_bot/remnawave.py клиент API Remnawave
+karipuza_bot/handlers.py  сценарии Telegram-бота
+karipuza_bot/ui.py        тексты и клавиатуры
+```
+
+## Настройка
+
+```bash
+cd /opt/karipuza-bot
+cp .env.example .env
+nano .env
+```
+
+Обязательные значения:
 
 ```env
 BOT_TOKEN=токен_от_BotFather
 ADMIN_IDS=ваш_telegram_id
-
-MARZBAN_URL=http://127.0.0.1:8000
-MARZBAN_USERNAME=логин_Marzban
-MARZBAN_PASSWORD=пароль_Marzban
-MARZBAN_INBOUND_TAG=VLESS TCP REALITY
-MARZBAN_INBOUND_TAGS=VLESS TCP REALITY
-PUBLIC_HOST=176.124.220.50
-SUBSCRIPTION_URL_PREFIX=https://sub.karipuza.ru:9443
-
-SUPPORT_USERNAME=@your_username
+REMNAWAVE_API_TOKEN=api_токен_из_Remnawave
+REMNAWAVE_SQUAD_UUIDS=uuid_внутренней_группы
+PAYMENT_DETAILS=реквизиты_для_оплаты
 ```
 
-Если нужно включить в подписку несколько Reality inbound, укажите их через запятую:
-
-```env
-MARZBAN_INBOUND_TAGS=VLESS TCP REALITY,VLESS TCP REALITY APPLE TEST
-```
-
-Для подписок Marzban должен отдавать внешний HTTPS-адрес. Обычно это настраивается в `/opt/marzban/.env` через `XRAY_SUBSCRIPTION_URL_PREFIX`.
-
-## HTTPS-подписки
-
-DNS `sub.karipuza.ru` должен вести на VPS. Xray использует порты `443` и `8443`, поэтому подписки выдаются через отдельный HTTPS-порт `9443`:
-
-```bash
-cd /opt/karipuza-bot
-git pull
-bash scripts/setup-subscription-https.sh
-```
-
-Скрипт настраивает nginx, Let's Encrypt, `XRAY_SUBSCRIPTION_URL_PREFIX=https://sub.karipuza.ru:9443` в Marzban и `SUBSCRIPTION_URL_PREFIX=https://sub.karipuza.ru:9443` в боте.
+Несколько администраторов и групп указываются через запятую.
 
 ## Запуск
 
 ```bash
 cd /opt/karipuza-bot
 python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python3 bot.py
+venv/bin/pip install -r requirements.txt
+venv/bin/python bot.py
 ```
 
-## Автозапуск
+## systemd
 
 ```bash
 cp systemd/karipuza-bot.service /etc/systemd/system/karipuza-bot.service
 systemctl daemon-reload
-systemctl enable karipuza-bot
-systemctl restart karipuza-bot
-systemctl status karipuza-bot
+systemctl enable --now karipuza-bot
+systemctl status karipuza-bot --no-pager
 ```
 
-## Логи
+Логи:
 
 ```bash
 journalctl -u karipuza-bot -f
 ```
+
+## Безопасный переход
+
+Старый Marzban не удаляется до полной проверки новой схемы. Перед изменениями
+нужна резервная копия, затем отдельно поднимаются Remnawave Panel и Node.
+Переключение порта `443` выполняется только после успешного теста нового узла.
