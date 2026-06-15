@@ -70,7 +70,7 @@ settings = Settings(
     database_path=Path(
         os.getenv("DATABASE_PATH", "/opt/karipuza-bot/data/karipuza.db")
     ),
-    remnawave_url=os.getenv("REMNAWAVE_URL", "http://127.0.0.1:3000")
+    remnawave_url=os.getenv("REMNAWAVE_URL", "http://127.0.0.1:3002")
     .strip()
     .rstrip("/"),
     remnawave_api_token=os.getenv("REMNAWAVE_API_TOKEN", "").strip(),
