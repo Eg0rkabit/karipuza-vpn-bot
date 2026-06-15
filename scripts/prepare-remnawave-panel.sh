@@ -5,6 +5,9 @@ REMNAWAVE_VERSION="${REMNAWAVE_VERSION:-2.7.4}"
 REMNAWAVE_DIR="/opt/remnawave"
 DOMAIN="${1:-sub.karipuza.ru}"
 BACKUP_ROOT="/root/karipuza-backups"
+LOCAL_PANEL_PORT="${LOCAL_PANEL_PORT:-3002}"
+LOCAL_PANEL_SITE="/etc/nginx/sites-available/remnawave-local-panel"
+LOCAL_PANEL_LINK="/etc/nginx/sites-enabled/remnawave-local-panel"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run this script as root." >&2
@@ -96,14 +99,57 @@ docker compose up -d
 echo "==> Waiting for health check"
 for _ in $(seq 1 60); do
   if curl --fail --silent "http://127.0.0.1:3001/health" >/dev/null; then
+    if ! command -v nginx >/dev/null 2>&1; then
+      apt-get update
+      apt-get install -y nginx
+    fi
+
+    cat > "${LOCAL_PANEL_SITE}" <<EOF
+server {
+    listen 127.0.0.1:${LOCAL_PANEL_PORT};
+    server_name _;
+
+    access_log off;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host \$http_host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+EOF
+
+    ln -sfn "${LOCAL_PANEL_SITE}" "${LOCAL_PANEL_LINK}"
+    nginx -t
+    systemctl enable --now nginx
+    systemctl reload nginx
+
+    panel_code="$(
+      curl --silent --output /dev/null --write-out '%{http_code}' \
+        --max-time 10 "http://127.0.0.1:${LOCAL_PANEL_PORT}/"
+    )"
+    if [[ "${panel_code}" == "000" || "${panel_code}" -ge 500 ]]; then
+      echo "Local panel proxy check failed with HTTP ${panel_code}." >&2
+      exit 1
+    fi
+
     echo
     echo "Remnawave Panel is healthy."
     echo "Old Marzban and port 443 were not changed."
+    echo "Local panel proxy returned HTTP ${panel_code}."
     echo
     echo "Open a new PowerShell window and run:"
-    echo "C:\\Windows\\System32\\OpenSSH\\ssh.exe -L 3000:127.0.0.1:3000 root@176.124.220.50"
+    echo "C:\\Windows\\System32\\OpenSSH\\ssh.exe -N -o ServerAliveInterval=30 -L 3300:127.0.0.1:${LOCAL_PANEL_PORT} root@176.124.220.50"
     echo
-    echo "Then open http://127.0.0.1:3000"
+    echo "Then open http://127.0.0.1:3300"
     trap - EXIT
     cleanup
     exit 0
