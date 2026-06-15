@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-NODE_VERSION="${NODE_VERSION:-2.7.0}"
+NODE_IMAGE="${NODE_IMAGE:-remnawave/node:latest}"
 NODE_DIR="/opt/remnanode"
 NODE_PORT="${1:-2222}"
 SECRET_KEY="${2:-}"
@@ -17,7 +17,8 @@ if ! [[ "${NODE_PORT}" =~ ^[0-9]+$ ]] ||
   exit 1
 fi
 
-if ! [[ "${SECRET_KEY}" =~ ^[A-Za-z0-9+/=]{100,}$ ]]; then
+if [[ "${#SECRET_KEY}" -lt 100 ]] ||
+  [[ "${SECRET_KEY}" =~ [[:space:]] ]]; then
   echo "Pass the SECRET_KEY copied from the Remnawave node form." >&2
   echo "Example: bash scripts/install-remnanode.sh 2222 'YOUR_SECRET_KEY'" >&2
   exit 1
@@ -38,7 +39,7 @@ fi
 cat > docker-compose.yml <<EOF
 services:
   remnanode:
-    image: remnawave/node:${NODE_VERSION}
+    image: ${NODE_IMAGE}
     container_name: remnanode
     hostname: remnanode
     restart: always
