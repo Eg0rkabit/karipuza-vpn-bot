@@ -9,6 +9,9 @@ XRAY_PATH="${XRAY_DIR}/xray"
 XRAY_ASSETS_PATH="${XRAY_DIR}"
 XRAY_CONFIG="${XRAY_CONFIG:-/var/lib/marzban/xray_config.json}"
 GITHUB_REPO="XTLS/Xray-core"
+# Marzban v0.8.4 cannot parse the X25519 output format introduced in
+# Xray v25.3.6. Keep the newest stable core from before that change.
+DEFAULT_XRAY_VERSION="v25.2.21"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run this script as root."
@@ -99,6 +102,10 @@ remove_test_mss_rule() {
 rollback() {
   set +e
   echo "Update check failed. Restoring the previous Marzban settings."
+  echo "Marzban logs before rollback:"
+  compose logs --tail=100 marzban 2>/dev/null ||
+    compose logs --tail=100 2>/dev/null ||
+    true
   cp -a "$env_backup" "$MARZBAN_ENV"
 
   if [ "$xray_existed" = "yes" ]; then
@@ -147,18 +154,7 @@ current_version="$(
 )"
 echo "Current bundled core: ${current_version:-unknown}"
 
-if [ -n "${XRAY_VERSION:-}" ]; then
-  version="$XRAY_VERSION"
-else
-  echo "==> Resolving the latest official Xray release"
-  version="$(
-    curl -fsSL \
-      -H "Accept: application/vnd.github+json" \
-      -H "User-Agent: karipuza-xray-updater" \
-      "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" |
-      python3 -c 'import json, sys; print(json.load(sys.stdin)["tag_name"])'
-  )"
-fi
+version="${XRAY_VERSION:-$DEFAULT_XRAY_VERSION}"
 
 if [ -z "$version" ]; then
   echo "Could not resolve the Xray version."
