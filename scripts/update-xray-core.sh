@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+trap 'echo "ERROR: update stopped at line ${LINENO}." >&2' ERR
 
 MARZBAN_DIR="${MARZBAN_DIR:-/opt/marzban}"
 MARZBAN_ENV="${MARZBAN_ENV:-${MARZBAN_DIR}/.env}"
@@ -142,7 +143,7 @@ fi
 
 current_version="$(
   docker exec "$container_id" /usr/local/bin/xray version 2>/dev/null |
-    head -n1 || true
+    sed -n '1p' || true
 )"
 echo "Current bundled core: ${current_version:-unknown}"
 
@@ -181,7 +182,7 @@ install -m 0755 "$tmp_dir/extracted/xray" "${XRAY_PATH}.new"
 install -m 0644 "$tmp_dir/extracted/geoip.dat" "${XRAY_DIR}/geoip.dat.new"
 install -m 0644 "$tmp_dir/extracted/geosite.dat" "${XRAY_DIR}/geosite.dat.new"
 
-new_version="$("${XRAY_PATH}.new" version | head -n1)"
+new_version="$("${XRAY_PATH}.new" version | sed -n '1p')"
 echo "Downloaded core: $new_version"
 
 if [ -f "$XRAY_CONFIG" ]; then
@@ -234,7 +235,7 @@ if ! wait_for_xray; then
 fi
 
 container_id="$(get_container_id)"
-echo "Running core: $(docker exec "$container_id" "$XRAY_PATH" version | head -n1)"
+echo "Running core: $(docker exec "$container_id" "$XRAY_PATH" version | sed -n '1p')"
 echo "Port 443: OK"
 echo
 echo "Xray update completed successfully."
