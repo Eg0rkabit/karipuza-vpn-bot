@@ -242,7 +242,9 @@ async def sync_subscription(
 
 
 async def index(request: web.Request) -> web.StreamResponse:
-    return web.FileResponse(STATIC_DIR / "index.html")
+    response = web.FileResponse(STATIC_DIR / "index.html")
+    response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+    return response
 
 
 async def health(request: web.Request) -> web.Response:
