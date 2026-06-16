@@ -46,7 +46,7 @@ button {
   margin: 0 auto;
   min-height: 100vh;
   padding: calc(env(safe-area-inset-top) + 16px) 14px
-    calc(env(safe-area-inset-bottom) + 76px);
+    calc(env(safe-area-inset-bottom) + 78px);
 }
 
 .loading {
@@ -99,7 +99,7 @@ button {
 
 .topbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 12px;
   margin-bottom: 14px;
@@ -138,44 +138,17 @@ button {
   overflow: hidden;
 }
 
+.mini-mark.large {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+}
+
 .brand-logo {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center;
-}
-
-.status-pill {
-  min-height: 34px;
-  padding: 7px 10px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--soft);
-  white-space: nowrap;
-  font-size: 13px;
-}
-
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--muted);
-}
-
-.dot.ok {
-  background: var(--green);
-}
-
-.dot.warn {
-  background: var(--amber);
-}
-
-.dot.bad {
-  background: var(--red);
 }
 
 .view {
@@ -194,6 +167,13 @@ button {
 .panel.tight {
   padding: 12px;
   box-shadow: none;
+}
+
+.home-hero {
+  box-shadow: none;
+  background:
+    linear-gradient(135deg, rgba(34, 193, 200, 0.08), transparent 46%),
+    var(--tg-theme-secondary-bg-color, var(--panel));
 }
 
 .split {
@@ -259,16 +239,29 @@ button {
   margin-top: 12px;
 }
 
+.actions.three,
+.compact-actions.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .btn {
-  min-height: 44px;
+  min-height: 38px;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: #24303a;
   color: var(--text);
   border: 1px solid #34424e;
   cursor: pointer;
   text-align: center;
   font-weight: 700;
+  font-size: 14px;
+  line-height: 1.18;
+}
+
+.btn.small {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 12px;
 }
 
 .btn.primary {
@@ -370,6 +363,55 @@ button {
   gap: 8px;
 }
 
+.compact-actions {
+  gap: 7px;
+}
+
+.compact-actions .btn {
+  min-height: 36px;
+  padding: 8px 9px;
+}
+
+.compact-actions.three .btn {
+  padding: 7px 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #151b21;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.status-card strong {
+  font-size: 15px;
+}
+
+.status-card.ok {
+  border-color: rgba(60, 207, 126, 0.3);
+}
+
+.status-card.warn {
+  border-color: rgba(239, 180, 84, 0.34);
+}
+
+.status-card.bad {
+  border-color: rgba(239, 107, 107, 0.34);
+}
+
 .subtle-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -421,6 +463,11 @@ button {
 .badge.bad {
   color: #ffc9c9;
   background: #462224;
+}
+
+.badge.muted {
+  color: var(--muted);
+  background: #20262d;
 }
 
 .plan-grid {
@@ -497,6 +544,7 @@ button {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
+  margin: 10px 0 0;
 }
 
 .steps {
@@ -536,6 +584,42 @@ button {
   gap: 8px;
 }
 
+.profile-card {
+  display: grid;
+  gap: 14px;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-row {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 10px 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.profile-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-row strong {
+  text-align: right;
+}
+
 .toast {
   position: fixed;
   left: 14px;
@@ -567,17 +651,20 @@ button {
   width: min(760px, 100%);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .bottom-nav.admin .bottom-nav-inner {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .nav-btn {
   min-height: 42px;
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--muted);
   background: transparent;
   display: flex;
@@ -589,6 +676,10 @@ button {
   padding: 0 3px;
   cursor: pointer;
   position: relative;
+}
+
+.nav-btn + .nav-btn {
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .nav-btn::before {
@@ -620,8 +711,17 @@ button {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
+  .compact-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .compact-actions.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .metric-grid,
-  .admin-grid {
+  .admin-grid,
+  .profile-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

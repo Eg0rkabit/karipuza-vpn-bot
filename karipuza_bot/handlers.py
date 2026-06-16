@@ -178,6 +178,27 @@ def create_router(
         await ensure_user(callback)
         await render(callback, ui.plans_text(), ui.plans_keyboard())
 
+    @router.callback_query(F.data == "profile")
+    async def profile(callback: CallbackQuery, bot: Bot) -> None:
+        await ensure_user(callback)
+        remote, local, _failed = await current_subscription(bot, callback.from_user.id)
+        url = (
+            remote.subscription_url
+            if remote
+            else (local["subscription_url"] if local else None)
+        )
+        await render(
+            callback,
+            ui.profile_text(
+                callback.from_user.id,
+                callback.from_user.first_name,
+                callback.from_user.username,
+                remote,
+                local,
+            ),
+            ui.profile_keyboard(bool(url)),
+        )
+
     @router.callback_query(F.data.startswith("plan:"))
     async def plan(callback: CallbackQuery) -> None:
         code = (callback.data or "").split(":", 1)[1]
@@ -606,7 +627,13 @@ def create_router(
             return
         updated = await remnawave.disable(user["remnawave_uuid"])
         await save_subscription(tg_id, updated)
-        await bot.send_message(tg_id, "Подписка была отключена администратором.")
+        await bot.send_message(
+            tg_id,
+            "<b>Доступ поставлен на паузу</b>\n\n"
+            "Подписка сохранена, но подключение временно выключено администратором. "
+            "Если это неожиданно, напишите в поддержку.",
+            reply_markup=ui.support_keyboard(),
+        )
         user = await db.get_user(tg_id)
         await render(
             callback,
@@ -626,7 +653,12 @@ def create_router(
             return
         updated = await remnawave.enable(user["remnawave_uuid"])
         await save_subscription(tg_id, updated)
-        await bot.send_message(tg_id, "Подписка снова включена.")
+        await bot.send_message(
+            tg_id,
+            "<b>Доступ снова включён</b>\n\n"
+            "Можно обновить подписку в Happ и подключаться как обычно.",
+            reply_markup=ui.kb([ui.button("🔑 Моя подписка", "subscription")]),
+        )
         user = await db.get_user(tg_id)
         await render(
             callback,

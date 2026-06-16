@@ -25,16 +25,16 @@ const state = {
 
 const NEWS = [
   {
-    title: "🚀 Mini App уже здесь",
-    text: "Управление подпиской, тарифами и поддержкой теперь собрано в одном удобном окне.",
+    title: "🚀 Mini App обновлён",
+    text: "Главная стала проще: новости, быстрые действия и ничего лишнего.",
   },
   {
-    title: "🌍 Серверы будут расширяться",
-    text: "Когда добавим новые страны, они появятся в подписке после обычного обновления профиля.",
+    title: "🌍 Новые страны появятся в подписке",
+    text: "Когда добавим дополнительные серверы, они появятся после обновления профиля в Happ.",
   },
   {
     title: "💳 Онлайн-оплата готовится",
-    text: "Готовим подключение ЮKassa. Пока платежи проходят через проверку админом.",
+    text: "Готовим ЮKassa. Пока платежи проходят через ручную проверку админом.",
   },
 ];
 
@@ -88,15 +88,49 @@ function formatTraffic(bytes) {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
-function statusText(status) {
-  const map = {
-    ACTIVE: "активна",
-    DISABLED: "отключена",
-    LIMITED: "лимит",
-    EXPIRED: "закончилась",
-    NONE: "нет",
+function statusDetails(status, isActive = false) {
+  if (status === "ACTIVE" && isActive) {
+    return {
+      text: "активна",
+      title: "Доступ активен",
+      tone: "ok",
+      note: "Скопируйте ссылку и добавьте её в Happ.",
+    };
+  }
+  if (status === "DISABLED") {
+    return {
+      text: "на паузе",
+      title: "Доступ поставлен на паузу",
+      tone: "warn",
+      note: "Подписка сохранена, но подключение временно выключено админом.",
+    };
+  }
+  if (status === "LIMITED") {
+    return {
+      text: "лимит",
+      title: "Лимит исчерпан",
+      tone: "warn",
+      note: "Доступ ограничен. Напишите в поддержку, если это выглядит странно.",
+    };
+  }
+  if (status === "EXPIRED") {
+    return {
+      text: "истекла",
+      title: "Подписка закончилась",
+      tone: "bad",
+      note: "Продлите доступ, чтобы снова подключиться.",
+    };
+  }
+  return {
+    text: "нет подписки",
+    title: "VPN ещё не подключён",
+    tone: "muted",
+    note: "Выберите тариф, отправьте оплату на проверку, и после подтверждения появится ссылка для Happ.",
   };
-  return map[status] || String(status || "нет").toLowerCase();
+}
+
+function statusText(status, isActive = false) {
+  return statusDetails(status, isActive).text;
 }
 
 function orderStatusText(status) {
@@ -110,10 +144,8 @@ function orderStatusText(status) {
   return map[status] || status;
 }
 
-function badgeClass(status) {
-  if (["ACTIVE", "APPROVED"].includes(status)) return "ok";
-  if (["REJECTED", "DISABLED", "EXPIRED"].includes(status)) return "bad";
-  return "warn";
+function badgeClass(status, isActive = false) {
+  return statusDetails(status, isActive).tone;
 }
 
 function escapeHtml(value) {
@@ -123,6 +155,11 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function userDisplayName() {
+  const user = state.me?.user;
+  return user?.firstName || user?.username || "личный кабинет";
 }
 
 function setToast(text) {
@@ -139,6 +176,11 @@ async function loadBase() {
   const [me, plans] = await Promise.all([api("/api/me"), api("/api/plans")]);
   state.me = me;
   state.plans = plans.plans || [];
+  if (!state.activeOrder) {
+    state.activeOrder = (me.orders || []).find(
+      (order) => order.status === "WAITING_PAYMENT",
+    );
+  }
 }
 
 async function refresh() {
@@ -171,8 +213,6 @@ async function loadAdmin() {
 }
 
 function header() {
-  const sub = state.me?.subscription;
-  const ok = sub?.status === "ACTIVE" && sub?.isActive;
   return `
     <header class="topbar">
       <div class="brand">
@@ -181,12 +221,8 @@ function header() {
         </div>
         <div>
           <h1>Karipuza VPN</h1>
-          <p>${escapeHtml(state.me?.user?.firstName || "личный кабинет")}</p>
+          <p>${escapeHtml(userDisplayName())}</p>
         </div>
-      </div>
-      <div class="status-pill">
-        <span class="dot ${ok ? "ok" : sub ? "warn" : ""}"></span>
-        ${ok ? "работает" : sub ? statusText(sub.status) : "нет подписки"}
       </div>
     </header>
   `;
@@ -199,6 +235,7 @@ function nav() {
     ["plans", "💳 Тарифы"],
     ["subscription", "🔑 Подписка"],
     ["support", "💬 Помощь"],
+    ["profile", "👤 Профиль"],
   ];
   if (isAdmin) tabs.push(["admin", "🛠 Админ"]);
   return `
@@ -218,90 +255,17 @@ function nav() {
   `;
 }
 
-function subscriptionPanel() {
-  const sub = state.me?.subscription;
-  if (!sub) {
-    return `
-      <section class="panel">
-        <p class="eyebrow">🔑 Подписка</p>
-        <h2 class="title">VPN ещё не подключён</h2>
-        <p class="subtitle">Выберите тариф, отправьте оплату на проверку, и после подтверждения здесь появится ссылка для Happ.</p>
-        <div class="actions">
-          <button class="btn primary" data-tab="plans">💳 Выбрать тариф</button>
-          <button class="btn ghost" data-tab="support">💬 Поддержка</button>
-        </div>
-      </section>
-    `;
-  }
-  return `
-    <section class="panel">
-      <div class="split">
-        <div>
-          <p class="eyebrow">🔑 Моя подписка</p>
-          <h2 class="title">${sub.status === "ACTIVE" ? "⚡ Доступ активен" : statusText(sub.status)}</h2>
-          <p class="subtitle">Действует до ${formatDate(sub.expireAt)}. Осталось ${sub.daysLeft} дн.</p>
-        </div>
-        <span class="badge ${badgeClass(sub.status)}">${statusText(sub.status)}</span>
-      </div>
-      <div class="metric-grid">
-        <div class="metric"><span>📊 Использовано</span><strong>${formatTraffic(sub.trafficUsed)}</strong></div>
-        <div class="metric"><span>∞ Трафик</span><strong>${sub.trafficLimit ? formatTraffic(sub.trafficLimit) : "безлимит"}</strong></div>
-      </div>
-      <div class="actions">
-        <button class="btn primary" data-copy-sub>📋 Скопировать</button>
-        <button class="btn" data-tab="plans">💳 Продлить</button>
-        <button class="btn ghost" data-refresh>🔄 Обновить</button>
-      </div>
-    </section>
-  `;
-}
-
-function recentOrders() {
-  const orders = state.me?.orders || [];
-  return `
-    <div class="section-title">
-      <h2>🧾 Последние заказы</h2>
-      <button class="btn ghost" data-tab="plans">Новый</button>
-    </div>
-    <div class="list">
-      ${
-        orders.length
-          ? orders
-              .map(
-                (order) => `
-                  <div class="row">
-                    <div class="row-head">
-                      <div>
-                        <div class="row-title">#${order.id} · ${escapeHtml(order.title)}</div>
-                        <div class="row-meta">${money(order.amount_rub)} · ${formatDate(order.created_at)}</div>
-                      </div>
-                      <span class="badge ${badgeClass(order.status)}">${orderStatusText(order.status)}</span>
-                    </div>
-                    ${
-                      order.status === "WAITING_PAYMENT"
-                        ? `<button class="btn primary" data-order-pay="${order.id}">Отправить оплату</button>`
-                        : ""
-                    }
-                  </div>
-                `,
-              )
-              .join("")
-          : `<div class="empty">Заказов пока нет</div>`
-      }
-    </div>
-  `;
-}
-
 function homeIntro() {
   const sub = state.me?.subscription;
+  const active = sub?.status === "ACTIVE" && sub?.isActive;
   return `
-    <section class="panel tight">
+    <section class="panel home-hero">
       <p class="eyebrow">👋 Главная</p>
-      <h2 class="title">${sub?.isActive ? "Всё в порядке, VPN активен" : "Добро пожаловать в Karipuza"}</h2>
-      <p class="subtitle">Здесь будут новости, быстрые действия, состояние подписки и важные уведомления по сервису.</p>
-      <div class="quick-actions">
-        <button class="btn primary" data-tab="${sub ? "subscription" : "plans"}">${sub ? "🔑 Моя подписка" : "💳 Купить доступ"}</button>
-        <button class="btn ghost" data-tab="support">💬 Написать в поддержку</button>
+      <h2 class="title">${active ? "Всё в порядке, VPN активен" : "Добро пожаловать в Karipuza"}</h2>
+      <p class="subtitle">Новости сервиса, быстрые действия и важные уведомления будут здесь.</p>
+      <div class="quick-actions compact-actions">
+        <button class="btn primary" data-tab="${sub ? "subscription" : "plans"}">${sub ? "🔑 Подписка" : "💳 Купить"}</button>
+        <button class="btn ghost" data-tab="support">💬 Поддержка</button>
       </div>
     </section>
   `;
@@ -325,19 +289,97 @@ function newsSection() {
   `;
 }
 
-function homeView() {
+function homeStatusCard() {
   const sub = state.me?.subscription;
+  const details = statusDetails(sub?.status, sub?.isActive);
+  return `
+    <section class="status-card ${details.tone}">
+      <div>
+        <span>${sub ? "Состояние доступа" : "Старт"}</span>
+        <strong>${sub ? details.title : "Оформите подписку"}</strong>
+      </div>
+      <button class="btn small" data-tab="${sub ? "subscription" : "plans"}">${sub ? "К подписке" : "Выбрать"}</button>
+    </section>
+  `;
+}
+
+function homeView() {
   return `
     <main class="view">
       ${homeIntro()}
-      ${subscriptionPanel()}
-      <section class="panel tight">
-        <p class="eyebrow">📲 Подключение</p>
-        <h2 class="title">${sub ? "Одна ссылка для всех устройств" : "Подключение появится после оплаты"}</h2>
-        <p class="subtitle">Подписку можно добавить в Happ на телефоне и компьютере. Когда появятся новые страны, они добавятся после обновления профиля.</p>
-      </section>
+      ${homeStatusCard()}
       ${newsSection()}
-      ${recentOrders()}
+    </main>
+  `;
+}
+
+function subscriptionPanel() {
+  const sub = state.me?.subscription;
+  const details = statusDetails(sub?.status, sub?.isActive);
+  if (!sub) {
+    return `
+      <section class="panel">
+        <p class="eyebrow">🔑 Подписка</p>
+        <h2 class="title">${details.title}</h2>
+        <p class="subtitle">${details.note}</p>
+        <div class="actions compact-actions">
+          <button class="btn primary" data-tab="plans">💳 Выбрать тариф</button>
+          <button class="btn ghost" data-tab="support">💬 Поддержка</button>
+        </div>
+      </section>
+    `;
+  }
+  return `
+    <section class="panel">
+      <div class="split">
+        <div>
+          <p class="eyebrow">🔑 Моя подписка</p>
+          <h2 class="title">${details.title}</h2>
+          <p class="subtitle">Действует до ${formatDate(sub.expireAt)}. Осталось ${sub.daysLeft} дн.</p>
+        </div>
+        <span class="badge ${details.tone}">${details.text}</span>
+      </div>
+      <p class="hint">${details.note}</p>
+      <div class="metric-grid">
+        <div class="metric"><span>📊 Использовано</span><strong>${formatTraffic(sub.trafficUsed)}</strong></div>
+        <div class="metric"><span>∞ Трафик</span><strong>${sub.trafficLimit ? formatTraffic(sub.trafficLimit) : "безлимит"}</strong></div>
+      </div>
+      <div class="actions compact-actions three">
+        <button class="btn primary" data-copy-sub>📋 Скопировать</button>
+        <button class="btn" data-tab="plans">💳 Продлить</button>
+        <button class="btn ghost" data-refresh>🔄 Обновить</button>
+      </div>
+    </section>
+  `;
+}
+
+function connectionPanel() {
+  const sub = state.me?.subscription;
+  return `
+    <section class="panel">
+      <p class="eyebrow">📲 Подключение</p>
+      <h2 class="title">${sub ? "Одна подписка для всех устройств" : "Подключение появится после оплаты"}</h2>
+      <p class="subtitle">Добавьте профиль в Happ на телефоне или компьютере. Когда появятся новые страны, они подтянутся после обновления профиля.</p>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div>Установите Happ для своего устройства.</div></div>
+        <div class="step"><div class="step-num">2</div><div>Нажмите «Скопировать» в блоке подписки выше.</div></div>
+        <div class="step"><div class="step-num">3</div><div>Добавьте ссылку в Happ и выберите нужный сервер.</div></div>
+      </div>
+      <div class="actions compact-actions">
+        <button class="btn" data-link="https://play.google.com/store/apps/details?id=com.happproxy">Android</button>
+        <button class="btn" data-link="https://apps.apple.com/us/app/happ-proxy-utility/id6504287215">iPhone</button>
+        <button class="btn" data-link="https://github.com/Happ-proxy/happ-desktop/releases">ПК</button>
+        <button class="btn ghost" data-refresh>Обновить</button>
+      </div>
+    </section>
+  `;
+}
+
+function subscriptionView() {
+  return `
+    <main class="view">
+      ${subscriptionPanel()}
+      ${connectionPanel()}
     </main>
   `;
 }
@@ -362,7 +404,9 @@ function planCard(plan) {
 function paymentPanel() {
   const order = state.activeOrder;
   if (!order) return "";
-  const details = state.me?.paymentDetails || "Реквизиты ещё не настроены. Напишите в поддержку.";
+  const details =
+    state.me?.paymentDetails ||
+    "Реквизиты ещё не настроены. Напишите в поддержку.";
   const yookassaReady = Boolean(state.me?.payment?.yookassaReady);
   return `
     <section class="panel payment-box">
@@ -374,11 +418,11 @@ function paymentPanel() {
         <span class="badge warn">${money(order.amount_rub)}</span>
       </div>
       <div class="subtle-card">
-        <strong>${yookassaReady ? "💳 Онлайн-оплата готова" : "💳 Онлайн-оплата готовится"}</strong>
+        <strong>${yookassaReady ? "💳 ЮKassa почти готова" : "💳 Онлайн-оплата готовится"}</strong>
         <div class="row-meta">
           ${
             yookassaReady
-              ? "ЮKassa настроена. Следующим шагом подключим автоматическую оплату и выдачу после webhook."
+              ? "Данные магазина добавлены. Осталось подключить создание платежей и webhook."
               : "Пока оплата проходит через ручную проверку. Поля ЮKassa уже подготовлены в настройках сервера."
           }
         </div>
@@ -388,8 +432,8 @@ function paymentPanel() {
         <label for="proofText">Данные платежа или комментарий</label>
         <textarea id="proofText" placeholder="Например: оплатил с карты **** 1234, время 18:40"></textarea>
       </div>
-      <div class="actions">
-        <button class="btn primary" data-submit-proof="${order.id}">✅ Отправить на проверку</button>
+      <div class="actions compact-actions">
+        <button class="btn primary" data-submit-proof="${order.id}">✅ Отправить</button>
         <button class="btn ghost" data-clear-order>Закрыть</button>
       </div>
     </section>
@@ -403,40 +447,11 @@ function plansView() {
       <section class="panel tight">
         <p class="eyebrow">💳 Тарифы</p>
         <h2 class="title">Выберите срок доступа</h2>
-        <p class="subtitle">После оплаты админ подтвердит платёж, и Mini App покажет ссылку для подключения.</p>
+        <p class="subtitle">После оплаты админ подтвердит платёж, и Mini App покажет подписку для подключения.</p>
       </section>
       <div class="plan-grid">
         ${state.plans.map(planCard).join("")}
       </div>
-    </main>
-  `;
-}
-
-function subscriptionView() {
-  const sub = state.me?.subscription;
-  return `
-    <main class="view">
-      ${subscriptionPanel()}
-      <section class="panel">
-        <p class="eyebrow">📲 Инструкция</p>
-        <h2 class="title">Как подключиться</h2>
-        <div class="steps">
-          <div class="step"><div class="step-num">1</div><div>Установите Happ на телефон или компьютер.</div></div>
-          <div class="step"><div class="step-num">2</div><div>Скопируйте ссылку подписки из этого раздела.</div></div>
-          <div class="step"><div class="step-num">3</div><div>Добавьте профиль в Happ и нажмите подключение.</div></div>
-        </div>
-        <div class="actions">
-          <button class="btn" data-link="https://play.google.com/store/apps/details?id=com.happproxy">🤖 Android</button>
-          <button class="btn" data-link="https://apps.apple.com/us/app/happ-proxy-utility/id6504287215">📱 iPhone</button>
-          <button class="btn" data-link="https://github.com/Happ-proxy/happ-desktop/releases">💻 ПК</button>
-          <button class="btn ghost" data-refresh>🔄 Обновить</button>
-        </div>
-      </section>
-      ${
-        sub?.subscriptionUrl
-          ? `<section class="panel"><p class="eyebrow">🔗 Ссылка подписки</p><div class="copy-box">${escapeHtml(sub.subscriptionUrl)}</div></section>`
-          : ""
-      }
     </main>
   `;
 }
@@ -481,6 +496,46 @@ function supportView() {
   `;
 }
 
+function profileView() {
+  const user = state.me?.user || {};
+  const sub = state.me?.subscription;
+  const details = statusDetails(sub?.status, sub?.isActive);
+  const paymentMode = state.me?.payment?.yookassaReady
+    ? "ЮKassa подключается"
+    : "ручная проверка";
+  return `
+    <main class="view">
+      <section class="panel profile-card">
+        <div class="profile-head">
+          <div class="mini-mark large" aria-hidden="true">
+            <img class="brand-logo" src="/assets/logo.png" alt="" />
+          </div>
+          <div>
+            <p class="eyebrow">👤 Профиль</p>
+            <h2 class="title">${escapeHtml(user.firstName || user.username || "Пользователь")}</h2>
+            <p class="subtitle">TG ID ${escapeHtml(user.tgId)}</p>
+          </div>
+        </div>
+        <div class="profile-grid">
+          <div class="profile-row"><span>Статус</span><strong>${details.text}</strong></div>
+          <div class="profile-row"><span>Подписка до</span><strong>${formatDate(sub?.expireAt)}</strong></div>
+          <div class="profile-row"><span>Осталось</span><strong>${sub ? `${sub.daysLeft} дн.` : "нет"}</strong></div>
+          <div class="profile-row"><span>Оплата</span><strong>${paymentMode}</strong></div>
+        </div>
+        <div class="actions compact-actions">
+          <button class="btn primary" data-tab="subscription">🔑 Подписка</button>
+          <button class="btn ghost" data-tab="support">💬 Поддержка</button>
+        </div>
+      </section>
+      <section class="panel tight">
+        <p class="eyebrow">🧭 Полезно</p>
+        <h2 class="title">Одна ссылка, несколько устройств</h2>
+        <p class="subtitle">Добавьте подписку в Happ один раз. Новые серверы и изменения будут появляться после обновления профиля.</p>
+      </section>
+    </main>
+  `;
+}
+
 function adminView() {
   if (!state.me?.user?.isAdmin) {
     return `<main class="view"><div class="empty">Недостаточно прав</div></main>`;
@@ -497,7 +552,7 @@ function adminView() {
             <p class="eyebrow">🛠 Админ-панель</p>
             <h2 class="title">Управление Karipuza</h2>
           </div>
-          <button class="btn ghost" data-admin-refresh>🔄 Обновить</button>
+          <button class="btn ghost small" data-admin-refresh>🔄 Обновить</button>
         </div>
         <div class="admin-grid">
           <div class="metric"><span>👥 Пользователи</span><strong>${stats.users ?? 0}</strong></div>
@@ -522,7 +577,7 @@ function adminView() {
                         <span class="badge warn">проверка</span>
                       </div>
                       <div class="copy-box">${escapeHtml(order.proof_text || "без текста")}</div>
-                      <div class="actions">
+                      <div class="actions compact-actions">
                         <button class="btn green" data-approve="${order.id}">✅ Подтвердить</button>
                         <button class="btn red" data-reject="${order.id}">✕ Отклонить</button>
                       </div>
@@ -565,7 +620,7 @@ function adminView() {
                           <label for="ticketReply${ticket.id}">Ответ</label>
                           <textarea id="ticketReply${ticket.id}" placeholder="Напишите ответ пользователю"></textarea>
                         </div>
-                        <div class="actions">
+                        <div class="actions compact-actions">
                           <button class="btn primary" data-reply-ticket="${ticket.id}">📨 Ответить</button>
                           <button class="btn ghost" data-close-ticket="${ticket.id}">Закрыть</button>
                         </div>
@@ -590,12 +645,12 @@ function adminView() {
                           <div class="row-title">${escapeHtml(user.first_name || user.username || `TG ${user.tg_id}`)}</div>
                           <div class="row-meta">TG ${user.tg_id} · до ${formatDate(user.expire_at)}</div>
                         </div>
-                        <span class="badge ${badgeClass(user.vpn_status)}">${statusText(user.vpn_status)}</span>
+                        <span class="badge ${badgeClass(user.vpn_status, user.vpn_status === "ACTIVE")}">${statusText(user.vpn_status, user.vpn_status === "ACTIVE")}</span>
                       </div>
-                      <div class="actions">
+                      <div class="actions compact-actions three">
                         <button class="btn green" data-grant="${user.tg_id}">+30 дней</button>
                         <button class="btn" data-enable="${user.tg_id}">✅ Включить</button>
-                        <button class="btn red" data-disable="${user.tg_id}">✕ Отключить</button>
+                        <button class="btn red" data-disable="${user.tg_id}">⏸ Пауза</button>
                       </div>
                     </div>
                   `,
@@ -617,6 +672,7 @@ function currentView() {
     plans: plansView,
     subscription: subscriptionView,
     support: supportView,
+    profile: profileView,
     admin: adminView,
   };
   return (views[state.tab] || homeView)();
@@ -626,7 +682,7 @@ function render() {
   app.innerHTML = `
     ${state.me ? header() : ""}
     ${currentView()}
-    ${nav()}
+    ${state.me ? nav() : ""}
     ${state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : ""}
   `;
 }
@@ -671,11 +727,6 @@ async function handleClick(event) {
       state.tab = "plans";
       await refresh();
       setToast(result.created ? "Заказ создан" : "Заказ уже был создан");
-    } else if (target.dataset.orderPay) {
-      const order = state.me.orders.find((item) => String(item.id) === target.dataset.orderPay);
-      state.activeOrder = order;
-      state.tab = "plans";
-      render();
     } else if (target.dataset.clearOrder !== undefined) {
       state.activeOrder = null;
       render();
@@ -751,12 +802,12 @@ async function handleClick(event) {
       await api(`/api/admin/users/${target.dataset.enable}/enable`, { method: "POST" });
       await loadAdmin();
       await refresh();
-      setToast("Пользователь включён");
+      setToast("Доступ снова включён");
     } else if (target.dataset.disable) {
       await api(`/api/admin/users/${target.dataset.disable}/disable`, { method: "POST" });
       await loadAdmin();
       await refresh();
-      setToast("Пользователь отключён");
+      setToast("Доступ поставлен на паузу");
     }
   } catch (error) {
     setToast(error.message);

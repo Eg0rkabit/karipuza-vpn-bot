@@ -43,10 +43,13 @@ def main_keyboard(is_admin: bool, mini_app_url: str = "") -> InlineKeyboardMarku
             [button("⚡ Подключить VPN", "plans")],
             [
                 button("🔑 Моя подписка", "subscription"),
-                button("💳 Тарифы", "plans"),
+                button("👤 Профиль", "profile"),
             ],
             [
+                button("💳 Тарифы", "plans"),
                 button("📲 Инструкция", "instruction"),
+            ],
+            [
                 button("💬 Поддержка", "support"),
             ],
         ]
@@ -164,18 +167,23 @@ def subscription_text(subscription: Subscription | None, local_user=None) -> str
     if subscription:
         status_map = {
             "ACTIVE": "активна",
-            "DISABLED": "отключена",
+            "DISABLED": "доступ на паузе",
             "LIMITED": "лимит исчерпан",
             "EXPIRED": "закончилась",
         }
         status = status_map.get(subscription.status, subscription.status.lower())
+        note = (
+            "Доступ сейчас на паузе. Подписка сохранена, но подключение временно выключено администратором."
+            if subscription.status == "DISABLED"
+            else "Нажмите кнопку ниже, чтобы добавить или обновить подписку в Happ."
+        )
         return (
             "<b>Моя подписка</b>\n\n"
             f"Статус: <b>{html.escape(status)}</b>\n"
             f"Активна до: <b>{format_date(subscription.expire_at)}</b>\n"
             f"Осталось: <b>{days_left(subscription.expire_at)} дн.</b>\n"
             f"Использовано: <b>{format_size(subscription.traffic_used)}</b>\n\n"
-            "Нажмите кнопку ниже, чтобы добавить или обновить подписку в Happ."
+            f"{note}"
         )
 
     if local_user and local_user["subscription_url"]:
@@ -216,6 +224,58 @@ def subscription_keyboard(
     )
     rows.append([button("📲 Инструкция", "instruction")])
     rows.append([button("🏠 Главное меню", "home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def profile_text(
+    tg_id: int,
+    first_name: str | None,
+    username: str | None,
+    subscription: Subscription | None,
+    local_user=None,
+) -> str:
+    name = first_name or username or "не указано"
+    username_text = f"@{username}" if username else "не указан"
+    if subscription:
+        status = {
+            "ACTIVE": "активна",
+            "DISABLED": "доступ на паузе",
+            "LIMITED": "лимит исчерпан",
+            "EXPIRED": "закончилась",
+        }.get(subscription.status, subscription.status.lower())
+        expire_at = format_date(subscription.expire_at)
+        traffic = format_size(subscription.traffic_used)
+    elif local_user and local_user["subscription_url"]:
+        status = "последние сохранённые данные"
+        expire_at = format_date(int(local_user["expire_at"]))
+        traffic = format_size(int(local_user["traffic_used"] or 0))
+    else:
+        status = "подписки пока нет"
+        expire_at = "не указано"
+        traffic = "0 Б"
+
+    return (
+        "<b>Профиль Karipuza</b>\n\n"
+        f"Имя: <b>{html.escape(str(name))}</b>\n"
+        f"Username: <b>{html.escape(username_text)}</b>\n"
+        f"Telegram ID: <code>{tg_id}</code>\n\n"
+        f"Статус: <b>{html.escape(status)}</b>\n"
+        f"Подписка до: <b>{expire_at}</b>\n"
+        f"Использовано: <b>{traffic}</b>"
+    )
+
+
+def profile_keyboard(has_subscription: bool) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if has_subscription:
+        rows.append([button("🔑 Моя подписка", "subscription")])
+    rows.extend(
+        [
+            [button("💳 Тарифы", "plans")],
+            [button("💬 Поддержка", "support")],
+            [button("🏠 Главное меню", "home")],
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -418,12 +478,20 @@ def admin_users_keyboard(
 
 def admin_user_text(user) -> str:
     username = f"@{user['username']}" if user["username"] else "не указан"
+    status_map = {
+        "ACTIVE": "активна",
+        "DISABLED": "доступ на паузе",
+        "LIMITED": "лимит исчерпан",
+        "EXPIRED": "закончилась",
+        "NONE": "нет подписки",
+    }
+    status = status_map.get(str(user["vpn_status"]), str(user["vpn_status"]))
     return (
         "<b>Пользователь</b>\n\n"
         f"Имя: <b>{html.escape(str(user['first_name'] or 'не указано'))}</b>\n"
         f"Username: {html.escape(username)}\n"
         f"Telegram ID: <code>{user['tg_id']}</code>\n"
-        f"VPN-статус: <b>{html.escape(str(user['vpn_status']))}</b>\n"
+        f"VPN-статус: <b>{html.escape(status)}</b>\n"
         f"Подписка до: <b>{format_date(int(user['expire_at']))}</b>\n"
         f"Использовано: <b>{format_size(int(user['traffic_used']))}</b>"
     )

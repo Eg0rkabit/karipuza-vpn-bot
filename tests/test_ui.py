@@ -20,6 +20,7 @@ class UiTests(unittest.TestCase):
 
         self.assertFalse(any("Админ-панель" in text for text in user_buttons))
         self.assertTrue(any("Админ-панель" in text for text in admin_buttons))
+        self.assertTrue(any("Профиль" in text for text in user_buttons))
 
     def test_user_name_is_escaped(self) -> None:
         text = ui.main_text("<Егор>")

@@ -674,6 +674,21 @@ async def api_admin_user_action(request: web.Request) -> web.Response:
         entity_type="user",
         entity_id=tg_id,
     )
+    if action == "disable":
+        await telegram_send(
+            request.app,
+            tg_id,
+            "<b>Доступ поставлен на паузу</b>\n\n"
+            "Подписка сохранена, но подключение временно выключено администратором. "
+            "Если это неожиданно, напишите в поддержку.",
+        )
+    else:
+        await telegram_send(
+            request.app,
+            tg_id,
+            "<b>Доступ снова включён</b>\n\n"
+            "Можно обновить подписку в Happ и подключаться как обычно.",
+        )
     return web.json_response(
         {"ok": True, "subscription": subscription_to_dict(subscription)}
     )
