@@ -27,7 +27,9 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--tg-theme-bg-color, var(--bg));
+  background:
+    linear-gradient(180deg, rgba(10, 14, 19, 0.74), rgba(10, 14, 19, 0.9)),
+    url("/assets/background.png") center / cover no-repeat fixed;
   color: var(--tg-theme-text-color, var(--text));
 }
 
@@ -158,7 +160,8 @@ button {
 
 .panel {
   border: 1px solid var(--line);
-  background: var(--tg-theme-secondary-bg-color, var(--panel));
+  background: rgba(23, 29, 35, 0.88);
+  backdrop-filter: blur(14px);
   border-radius: 8px;
   padding: 14px;
   box-shadow: var(--shadow);
@@ -172,8 +175,8 @@ button {
 .home-hero {
   box-shadow: none;
   background:
-    linear-gradient(135deg, rgba(34, 193, 200, 0.08), transparent 46%),
-    var(--tg-theme-secondary-bg-color, var(--panel));
+    linear-gradient(135deg, rgba(34, 193, 200, 0.16), transparent 52%),
+    rgba(23, 29, 35, 0.86);
 }
 
 .split {
