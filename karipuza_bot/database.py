@@ -345,6 +345,23 @@ class Database:
             cursor = await db.execute(query, params)
             return await cursor.fetchall()
 
+    async def list_user_orders(
+        self, tg_id: int, limit: int = 10
+    ) -> list[aiosqlite.Row]:
+        async with self.connect() as db:
+            cursor = await db.execute(
+                """
+                SELECT orders.*, users.username, users.first_name
+                FROM orders
+                JOIN users ON users.tg_id = orders.tg_id
+                WHERE orders.tg_id = ?
+                ORDER BY orders.created_at DESC
+                LIMIT ?
+                """,
+                (tg_id, limit),
+            )
+            return await cursor.fetchall()
+
     async def create_ticket(self, tg_id: int, text: str) -> int:
         now = int(time.time())
         async with self.connect() as db:
@@ -395,6 +412,23 @@ class Database:
                 LIMIT ?
                 """,
                 (status, limit),
+            )
+            return await cursor.fetchall()
+
+    async def list_user_tickets(
+        self, tg_id: int, limit: int = 10
+    ) -> list[aiosqlite.Row]:
+        async with self.connect() as db:
+            cursor = await db.execute(
+                """
+                SELECT tickets.*, users.username, users.first_name
+                FROM tickets
+                JOIN users ON users.tg_id = tickets.tg_id
+                WHERE tickets.tg_id = ?
+                ORDER BY tickets.updated_at DESC
+                LIMIT ?
+                """,
+                (tg_id, limit),
             )
             return await cursor.fetchall()
 

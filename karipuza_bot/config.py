@@ -46,6 +46,12 @@ class Settings:
     admin_ids: tuple[int, ...]
     database_path: Path
 
+    mini_app_url: str
+    webapp_host: str
+    webapp_port: int
+    webapp_dev_auth: bool
+    webapp_auth_ttl_seconds: int
+
     remnawave_url: str
     remnawave_api_token: str
     remnawave_squad_uuids: tuple[str, ...]
@@ -70,6 +76,12 @@ settings = Settings(
     database_path=Path(
         os.getenv("DATABASE_PATH", "/opt/karipuza-bot/data/karipuza.db")
     ),
+    mini_app_url=os.getenv("MINI_APP_URL", "").strip().rstrip("/"),
+    webapp_host=os.getenv("WEBAPP_HOST", "127.0.0.1").strip(),
+    webapp_port=int(os.getenv("WEBAPP_PORT", "8080")),
+    webapp_dev_auth=os.getenv("WEBAPP_DEV_AUTH", "").strip().lower()
+    in {"1", "true", "yes", "on"},
+    webapp_auth_ttl_seconds=int(os.getenv("WEBAPP_AUTH_TTL_SECONDS", "86400")),
     remnawave_url=os.getenv("REMNAWAVE_URL", "http://127.0.0.1:3002")
     .strip()
     .rstrip("/"),

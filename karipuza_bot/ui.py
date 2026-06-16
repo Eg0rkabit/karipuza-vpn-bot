@@ -4,7 +4,12 @@ import html
 import time
 from datetime import datetime
 
-from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    CopyTextButton,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    WebAppInfo,
+)
 
 from .config import TARIFFS, Tariff
 from .remnawave import Subscription
@@ -22,18 +27,30 @@ def button(text: str, callback: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, callback_data=callback)
 
 
-def main_keyboard(is_admin: bool) -> InlineKeyboardMarkup:
-    rows = [
-        [button("Подключить VPN", "plans")],
+def main_keyboard(is_admin: bool, mini_app_url: str = "") -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if mini_app_url:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="Открыть Karipuza",
+                    web_app=WebAppInfo(url=mini_app_url),
+                )
+            ]
+        )
+    rows.extend(
         [
-            button("Моя подписка", "subscription"),
-            button("Тарифы", "plans"),
-        ],
-        [
-            button("Инструкция", "instruction"),
-            button("Поддержка", "support"),
-        ],
-    ]
+            [button("Подключить VPN", "plans")],
+            [
+                button("Моя подписка", "subscription"),
+                button("Тарифы", "plans"),
+            ],
+            [
+                button("Инструкция", "instruction"),
+                button("Поддержка", "support"),
+            ],
+        ]
+    )
     if is_admin:
         rows.append([button("Админ-панель", "admin:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

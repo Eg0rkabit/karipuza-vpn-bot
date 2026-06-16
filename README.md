@@ -23,6 +23,8 @@ karipuza_bot/database.py  SQLite: пользователи, заказы, тик
 karipuza_bot/remnawave.py клиент API Remnawave
 karipuza_bot/handlers.py  сценарии Telegram-бота
 karipuza_bot/ui.py        тексты и клавиатуры
+karipuza_bot/webapp.py    backend Telegram Mini App
+karipuza_bot/web_static/  интерфейс Mini App
 ```
 
 ## Настройка
@@ -67,6 +69,31 @@ systemctl status karipuza-bot --no-pager
 
 ```bash
 journalctl -u karipuza-bot -f
+```
+
+## Telegram Mini App
+
+Для Mini App нужен отдельный HTTPS-поддомен:
+
+```text
+app.karipuza.ru -> A -> IP вашего VPS
+```
+
+После того как DNS-запись появилась:
+
+```bash
+cd /opt/karipuza-bot
+git pull
+bash scripts/deploy-mini-app.sh app.karipuza.ru
+```
+
+Скрипт поднимает сервис `karipuza-webapp`, получает TLS-сертификат через
+Let's Encrypt, настраивает nginx и добавляет кнопку Mini App в меню Telegram-бота.
+
+Логи Mini App:
+
+```bash
+journalctl -u karipuza-webapp -f
 ```
 
 ## Безопасный переход

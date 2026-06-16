@@ -37,6 +37,9 @@ def create_router(
     def is_admin(tg_id: int) -> bool:
         return tg_id in settings.admin_ids
 
+    def main_menu_keyboard(tg_id: int):
+        return ui.main_keyboard(is_admin(tg_id), settings.mini_app_url)
+
     async def ensure_user(message_or_callback: Message | CallbackQuery) -> None:
         user = message_or_callback.from_user
         if not user:
@@ -136,7 +139,7 @@ def create_router(
         await db.clear_session(message.from_user.id)
         await message.answer(
             ui.main_text(message.from_user.first_name),
-            reply_markup=ui.main_keyboard(is_admin(message.from_user.id)),
+            reply_markup=main_menu_keyboard(message.from_user.id),
         )
 
     @router.message(Command("cancel"))
@@ -144,7 +147,7 @@ def create_router(
         await db.clear_session(message.from_user.id)
         await message.answer(
             "Действие отменено.",
-            reply_markup=ui.main_keyboard(is_admin(message.from_user.id)),
+            reply_markup=main_menu_keyboard(message.from_user.id),
         )
 
     @router.message(Command("admin"))
@@ -167,7 +170,7 @@ def create_router(
         await render(
             callback,
             ui.main_text(callback.from_user.first_name),
-            ui.main_keyboard(is_admin(callback.from_user.id)),
+            main_menu_keyboard(callback.from_user.id),
         )
 
     @router.callback_query(F.data == "plans")
@@ -638,7 +641,7 @@ def create_router(
         if not session:
             await message.answer(
                 "Используйте кнопки меню.",
-                reply_markup=ui.main_keyboard(is_admin(message.from_user.id)),
+                reply_markup=main_menu_keyboard(message.from_user.id),
             )
             return
 
@@ -685,7 +688,7 @@ def create_router(
             await message.answer(
                 "<b>Платёж отправлен на проверку</b>\n\n"
                 "Когда администратор подтвердит оплату, бот пришлёт уведомление.",
-                reply_markup=ui.main_keyboard(is_admin(message.from_user.id)),
+                reply_markup=main_menu_keyboard(message.from_user.id),
             )
             return
 
@@ -715,7 +718,7 @@ def create_router(
             await message.answer(
                 f"<b>Обращение #{ticket_id} создано</b>\n\n"
                 "Ответ администратора придёт в этот чат.",
-                reply_markup=ui.main_keyboard(is_admin(message.from_user.id)),
+                reply_markup=main_menu_keyboard(message.from_user.id),
             )
             return
 
