@@ -457,6 +457,22 @@ class Database:
             )
             await db.commit()
 
+    async def list_ticket_messages(
+        self, ticket_id: int, limit: int = 20
+    ) -> list[aiosqlite.Row]:
+        async with self.connect() as db:
+            cursor = await db.execute(
+                """
+                SELECT *
+                FROM ticket_messages
+                WHERE ticket_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (ticket_id, limit),
+            )
+            return await cursor.fetchall()
+
     async def close_ticket(self, ticket_id: int) -> None:
         async with self.connect() as db:
             await db.execute(

@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800;900&display=swap");
+
 :root {
   color-scheme: dark;
   --bg: #101419;
@@ -14,8 +16,8 @@
   --blue: #6aa5ff;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+    "Manrope", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
 }
 
 * {
@@ -44,7 +46,7 @@ button {
   margin: 0 auto;
   min-height: 100vh;
   padding: calc(env(safe-area-inset-top) + 16px) 14px
-    calc(env(safe-area-inset-bottom) + 90px);
+    calc(env(safe-area-inset-bottom) + 76px);
 }
 
 .loading {
@@ -86,6 +88,15 @@ button {
   background: var(--blue);
 }
 
+.loading-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  object-fit: cover;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -106,6 +117,7 @@ button {
   font-size: 21px;
   line-height: 1.05;
   letter-spacing: 0;
+  font-weight: 900;
 }
 
 .brand p {
@@ -115,24 +127,22 @@ button {
 }
 
 .mini-mark {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
-  background: #122a2e;
+  background: #0e1012;
   border: 1px solid #1f5960;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
+  overflow: hidden;
 }
 
-.mini-mark .brand-mark {
-  width: 20px;
-  height: 20px;
-  gap: 3px;
-}
-
-.mini-mark .brand-mark span {
-  border-radius: 2px 2px 1px 1px;
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 
 .status-pill {
@@ -204,6 +214,7 @@ button {
   font-size: 20px;
   line-height: 1.18;
   letter-spacing: 0;
+  font-weight: 900;
 }
 
 .subtitle {
@@ -296,6 +307,7 @@ button {
   margin: 0;
   font-size: 17px;
   letter-spacing: 0;
+  font-weight: 900;
 }
 
 .section-title button {
@@ -332,6 +344,56 @@ button {
 .row-meta {
   color: var(--muted);
   font-size: 13px;
+}
+
+.news-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.news-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel);
+  display: grid;
+  gap: 6px;
+}
+
+.news-card strong {
+  font-size: 15px;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.subtle-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #141a20;
+  padding: 12px;
+}
+
+.message-stack {
+  display: grid;
+  gap: 6px;
+}
+
+.message-bubble {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: #10151b;
+  color: var(--soft);
+  font-size: 13px;
+}
+
+.reply-box {
+  display: grid;
+  gap: 8px;
 }
 
 .badge {
@@ -497,8 +559,8 @@ button {
   background: rgba(16, 20, 25, 0.94);
   border-top: 1px solid var(--line);
   backdrop-filter: blur(12px);
-  padding: 8px max(8px, env(safe-area-inset-left))
-    calc(env(safe-area-inset-bottom) + 8px);
+  padding: 6px max(8px, env(safe-area-inset-left))
+    calc(env(safe-area-inset-bottom) + 6px);
 }
 
 .bottom-nav-inner {
@@ -514,22 +576,30 @@ button {
 }
 
 .nav-btn {
-  min-height: 48px;
+  min-height: 42px;
   border-radius: 8px;
   color: var(--muted);
   background: transparent;
-  display: grid;
-  place-items: center;
-  gap: 3px;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.15;
+  padding: 0 3px;
   cursor: pointer;
+  position: relative;
 }
 
-.nav-btn span:first-child {
-  width: 22px;
-  height: 3px;
+.nav-btn::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  width: 18px;
+  height: 2px;
   border-radius: 999px;
-  background: transparent;
+  background: var(--teal);
+  opacity: 0;
 }
 
 .nav-btn.active {
@@ -537,8 +607,8 @@ button {
   background: #1a222a;
 }
 
-.nav-btn.active span:first-child {
-  background: var(--teal);
+.nav-btn.active::before {
+  opacity: 1;
 }
 
 @media (min-width: 620px) {

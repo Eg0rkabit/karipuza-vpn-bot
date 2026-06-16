@@ -269,6 +269,13 @@ async def api_me(request: web.Request) -> web.Response:
             "tickets": tickets,
             "syncError": sync_error,
             "paymentDetails": request.app["settings"].payment_details,
+            "payment": {
+                "provider": "yookassa"
+                if request.app["settings"].yookassa_ready
+                else "manual",
+                "yookassaReady": request.app["settings"].yookassa_ready,
+                "returnUrl": request.app["settings"].yookassa_return_url,
+            },
         }
     )
 
@@ -419,6 +426,22 @@ async def api_admin_orders(request: web.Request) -> web.Response:
     return web.json_response({"orders": orders})
 
 
+async def api_admin_tickets(request: web.Request) -> web.Response:
+    await require_admin(request)
+    status = request.query.get("status") or "OPEN"
+    db: Database = request.app["db"]
+    tickets = []
+    for ticket in await db.list_tickets(status=status, limit=50):
+        item = row_to_dict(ticket) or {}
+        messages = [
+            row_to_dict(row)
+            for row in await db.list_ticket_messages(int(ticket["id"]), limit=6)
+        ]
+        item["messages"] = list(reversed(messages))
+        tickets.append(item)
+    return web.json_response({"tickets": tickets})
+
+
 async def api_admin_approve_order(request: web.Request) -> web.Response:
     auth = await require_admin(request)
     order_id = int(request.match_info["order_id"])
@@ -512,6 +535,66 @@ async def api_admin_reject_order(request: web.Request) -> web.Response:
     )
     return web.json_response(
         {"ok": True, "order": row_to_dict(await db.get_order(order_id))}
+    )
+
+
+async def api_admin_reply_ticket(request: web.Request) -> web.Response:
+    auth = await require_admin(request)
+    ticket_id = int(request.match_info["ticket_id"])
+    data = await read_json(request)
+    text = safe_text(data.get("text"))
+    if not text:
+        raise web.HTTPBadRequest(text="Reply text is required")
+
+    db: Database = request.app["db"]
+    ticket = await db.get_ticket(ticket_id)
+    if not ticket or ticket["status"] != "OPEN":
+        raise web.HTTPNotFound(text="Ticket not found")
+
+    await db.add_ticket_message(
+        ticket_id,
+        sender_tg_id=auth.tg_id,
+        sender_role="ADMIN",
+        text=text,
+    )
+    await db.audit(
+        "WEBAPP_TICKET_REPLIED",
+        actor_tg_id=auth.tg_id,
+        entity_type="ticket",
+        entity_id=ticket_id,
+    )
+    await telegram_send(
+        request.app,
+        int(ticket["tg_id"]),
+        f"<b>Ответ поддержки по обращению #{ticket_id}</b>\n\n{html.escape(text)}",
+    )
+    return web.json_response(
+        {"ok": True, "ticket": row_to_dict(await db.get_ticket(ticket_id))}
+    )
+
+
+async def api_admin_close_ticket(request: web.Request) -> web.Response:
+    auth = await require_admin(request)
+    ticket_id = int(request.match_info["ticket_id"])
+    db: Database = request.app["db"]
+    ticket = await db.get_ticket(ticket_id)
+    if not ticket:
+        raise web.HTTPNotFound(text="Ticket not found")
+
+    await db.close_ticket(ticket_id)
+    await db.audit(
+        "WEBAPP_TICKET_CLOSED",
+        actor_tg_id=auth.tg_id,
+        entity_type="ticket",
+        entity_id=ticket_id,
+    )
+    await telegram_send(
+        request.app,
+        int(ticket["tg_id"]),
+        f"Обращение #{ticket_id} закрыто. Если вопрос остался, создайте новое обращение.",
+    )
+    return web.json_response(
+        {"ok": True, "ticket": row_to_dict(await db.get_ticket(ticket_id))}
     )
 
 
@@ -647,11 +730,18 @@ async def build_app(app_settings: Settings = settings) -> web.Application:
     app.router.add_get("/api/admin/summary", api_admin_summary)
     app.router.add_get("/api/admin/users", api_admin_users)
     app.router.add_get("/api/admin/orders", api_admin_orders)
+    app.router.add_get("/api/admin/tickets", api_admin_tickets)
     app.router.add_post(
         r"/api/admin/orders/{order_id:\d+}/approve", api_admin_approve_order
     )
     app.router.add_post(
         r"/api/admin/orders/{order_id:\d+}/reject", api_admin_reject_order
+    )
+    app.router.add_post(
+        r"/api/admin/tickets/{ticket_id:\d+}/reply", api_admin_reply_ticket
+    )
+    app.router.add_post(
+        r"/api/admin/tickets/{ticket_id:\d+}/close", api_admin_close_ticket
     )
     app.router.add_post(r"/api/admin/users/{tg_id:\d+}/grant", api_admin_grant_user)
     app.router.add_post(

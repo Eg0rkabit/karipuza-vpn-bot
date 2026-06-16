@@ -57,6 +57,9 @@ class Settings:
     remnawave_squad_uuids: tuple[str, ...]
 
     payment_details: str
+    yookassa_shop_id: str
+    yookassa_secret_key: str
+    yookassa_return_url: str
 
     action_cooldown_seconds: float
     heavy_action_cooldown_seconds: float
@@ -68,6 +71,10 @@ class Settings:
             and self.remnawave_api_token
             and self.remnawave_squad_uuids
         )
+
+    @property
+    def yookassa_ready(self) -> bool:
+        return bool(self.yookassa_shop_id and self.yookassa_secret_key)
 
 
 settings = Settings(
@@ -88,6 +95,9 @@ settings = Settings(
     remnawave_api_token=os.getenv("REMNAWAVE_API_TOKEN", "").strip(),
     remnawave_squad_uuids=_csv_strings(os.getenv("REMNAWAVE_SQUAD_UUIDS", "")),
     payment_details=_multiline(os.getenv("PAYMENT_DETAILS", "")),
+    yookassa_shop_id=os.getenv("YOOKASSA_SHOP_ID", "").strip(),
+    yookassa_secret_key=os.getenv("YOOKASSA_SECRET_KEY", "").strip(),
+    yookassa_return_url=os.getenv("YOOKASSA_RETURN_URL", "").strip(),
     action_cooldown_seconds=float(os.getenv("ACTION_COOLDOWN_SECONDS", "0.8")),
     heavy_action_cooldown_seconds=float(
         os.getenv("HEAVY_ACTION_COOLDOWN_SECONDS", "3")

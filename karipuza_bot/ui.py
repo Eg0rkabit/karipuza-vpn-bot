@@ -33,26 +33,26 @@ def main_keyboard(is_admin: bool, mini_app_url: str = "") -> InlineKeyboardMarku
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Открыть Karipuza",
+                    text="🚀 Karipuza App",
                     web_app=WebAppInfo(url=mini_app_url),
                 )
             ]
         )
     rows.extend(
         [
-            [button("Подключить VPN", "plans")],
+            [button("⚡ Подключить VPN", "plans")],
             [
-                button("Моя подписка", "subscription"),
-                button("Тарифы", "plans"),
+                button("🔑 Моя подписка", "subscription"),
+                button("💳 Тарифы", "plans"),
             ],
             [
-                button("Инструкция", "instruction"),
-                button("Поддержка", "support"),
+                button("📲 Инструкция", "instruction"),
+                button("💬 Поддержка", "support"),
             ],
         ]
     )
     if is_admin:
-        rows.append([button("Админ-панель", "admin:home")])
+        rows.append([button("🛠 Админ-панель", "admin:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -199,26 +199,23 @@ def subscription_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Скопировать ссылку",
+                    text="📋 Скопировать ссылку",
                     copy_text=CopyTextButton(text=subscription_url),
                 )
             ]
         )
-        rows.append(
-            [InlineKeyboardButton(text="Открыть подписку", url=subscription_url)]
-        )
-        rows.append([button("QR-код", "subscription:qr")])
-        rows.append([button("Обновить данные", "subscription")])
+        rows.append([button("▣ QR-код", "subscription:qr")])
+        rows.append([button("🔄 Обновить данные", "subscription")])
     rows.append(
         [
             button(
-                "Продлить подписку" if has_subscription else "Выбрать тариф",
+                "💳 Продлить подписку" if has_subscription else "💳 Выбрать тариф",
                 "plans",
             )
         ]
     )
-    rows.append([button("Инструкция", "instruction")])
-    rows.append([button("Главное меню", "home")])
+    rows.append([button("📲 Инструкция", "instruction")])
+    rows.append([button("🏠 Главное меню", "home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

@@ -18,8 +18,8 @@ class UiTests(unittest.TestCase):
             for button in row
         ]
 
-        self.assertNotIn("Админ-панель", user_buttons)
-        self.assertIn("Админ-панель", admin_buttons)
+        self.assertFalse(any("Админ-панель" in text for text in user_buttons))
+        self.assertTrue(any("Админ-панель" in text for text in admin_buttons))
 
     def test_user_name_is_escaped(self) -> None:
         text = ui.main_text("<Егор>")

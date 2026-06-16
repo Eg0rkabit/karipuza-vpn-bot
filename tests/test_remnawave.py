@@ -56,6 +56,9 @@ class RemnawaveClientTests(unittest.IsolatedAsyncioTestCase):
             remnawave_api_token="api-token",
             remnawave_squad_uuids=("22222222-2222-2222-2222-222222222222",),
             payment_details="details",
+            yookassa_shop_id="",
+            yookassa_secret_key="",
+            yookassa_return_url="https://app.example",
             action_cooldown_seconds=0.8,
             heavy_action_cooldown_seconds=3,
         )
