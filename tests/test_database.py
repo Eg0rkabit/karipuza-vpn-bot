@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import aiosqlite
+
 from karipuza_bot.database import Database
 
 
@@ -89,6 +91,60 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         await self.db.set_order_payment_status(order_id, payment_status="succeeded")
         updated = await self.db.get_order(order_id)
         self.assertEqual(updated["payment_status"], "succeeded")
+
+    async def test_old_orders_schema_is_migrated(self) -> None:
+        old_db_path = Path(self.temp_dir.name) / "old-schema.db"
+        async with aiosqlite.connect(old_db_path) as connection:
+            await connection.executescript(
+                """
+                CREATE TABLE users (
+                    tg_id INTEGER PRIMARY KEY,
+                    username TEXT,
+                    first_name TEXT,
+                    remnawave_uuid TEXT,
+                    subscription_url TEXT,
+                    vpn_status TEXT NOT NULL DEFAULT 'NONE',
+                    expire_at INTEGER NOT NULL DEFAULT 0,
+                    traffic_used INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+
+                CREATE TABLE orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tg_id INTEGER NOT NULL REFERENCES users(tg_id),
+                    tariff_code TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    duration_days INTEGER NOT NULL,
+                    amount_rub INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    proof_type TEXT,
+                    proof_file_id TEXT,
+                    proof_text TEXT,
+                    reviewed_by INTEGER,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                """
+            )
+            await connection.commit()
+
+        migrated = Database(old_db_path)
+        await migrated.init()
+
+        async with migrated.connect() as connection:
+            cursor = await connection.execute("PRAGMA table_info(orders)")
+            columns = {row[1] for row in await cursor.fetchall()}
+            cursor = await connection.execute(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type = 'index' AND name = 'idx_orders_payment_id'
+                """
+            )
+            index = await cursor.fetchone()
+
+        self.assertIn("payment_id", columns)
+        self.assertIsNotNone(index)
 
     async def test_ticket_and_session_flow(self) -> None:
         await self.db.set_session(100, "support_new", {"source": "menu"})

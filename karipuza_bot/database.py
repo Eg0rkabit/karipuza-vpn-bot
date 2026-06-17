@@ -66,9 +66,6 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_orders_status
                 ON orders(status, created_at DESC);
 
-                CREATE INDEX IF NOT EXISTS idx_orders_payment_id
-                ON orders(payment_id);
-
                 CREATE TABLE IF NOT EXISTS tickets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     tg_id INTEGER NOT NULL REFERENCES users(tg_id),
