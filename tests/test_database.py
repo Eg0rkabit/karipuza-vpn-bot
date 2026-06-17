@@ -62,6 +62,34 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(waiting["id"], order_id)
 
+    async def test_order_payment_fields_are_saved(self) -> None:
+        order_id = await self.db.create_order(
+            100,
+            tariff_code="month_1",
+            title="1 месяц",
+            duration_days=30,
+            amount_rub=299,
+        )
+
+        saved = await self.db.attach_order_payment(
+            order_id,
+            provider="yookassa",
+            payment_id="pay_123",
+            payment_url="https://yoomoney.ru/payment",
+            payment_status="pending",
+        )
+        self.assertTrue(saved)
+
+        order = await self.db.get_order_by_payment_id("pay_123")
+
+        self.assertEqual(order["id"], order_id)
+        self.assertEqual(order["payment_provider"], "yookassa")
+        self.assertEqual(order["payment_url"], "https://yoomoney.ru/payment")
+
+        await self.db.set_order_payment_status(order_id, payment_status="succeeded")
+        updated = await self.db.get_order(order_id)
+        self.assertEqual(updated["payment_status"], "succeeded")
+
     async def test_ticket_and_session_flow(self) -> None:
         await self.db.set_session(100, "support_new", {"source": "menu"})
         self.assertEqual(

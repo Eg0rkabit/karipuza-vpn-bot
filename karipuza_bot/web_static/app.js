@@ -257,11 +257,10 @@ function nav() {
 
 function homeIntro() {
   const sub = state.me?.subscription;
-  const active = sub?.status === "ACTIVE" && sub?.isActive;
   return `
     <section class="panel home-hero">
       <p class="eyebrow">👋 Главная</p>
-      <h2 class="title">${active ? "Всё в порядке, VPN активен" : "Добро пожаловать в Karipuza VPN!"}</h2>
+      <h2 class="title">Добро пожаловать в Karipuza VPN!</h2>
       <p class="subtitle">Здесь ты можешь быстро подключить удобный VPN для своих устройств. Karipuza VPN помогает сохранить приватность, пользоваться интернетом стабильнее и подключаться без проблем.</p>
       <p class="subtitle">Наша гордость — твоя безопасность и удобство! 💫</p>
       <div class="quick-actions compact-actions">
@@ -290,25 +289,10 @@ function newsSection() {
   `;
 }
 
-function homeStatusCard() {
-  const sub = state.me?.subscription;
-  const details = statusDetails(sub?.status, sub?.isActive);
-  return `
-    <section class="status-card ${details.tone}">
-      <div>
-        <span>${sub ? "Состояние доступа" : "Старт"}</span>
-        <strong>${sub ? details.title : "Оформите подписку"}</strong>
-      </div>
-      <button class="btn small" data-tab="${sub ? "subscription" : "plans"}">${sub ? "К подписке" : "Выбрать"}</button>
-    </section>
-  `;
-}
-
 function homeView() {
   return `
     <main class="view">
       ${homeIntro()}
-      ${homeStatusCard()}
       ${newsSection()}
     </main>
   `;
@@ -409,6 +393,7 @@ function paymentPanel() {
     state.me?.paymentDetails ||
     "Реквизиты ещё не настроены. Напишите в поддержку.";
   const yookassaReady = Boolean(state.me?.payment?.yookassaReady);
+  const paymentUrl = order.payment_url || order.paymentUrl;
   return `
     <section class="panel payment-box">
       <div class="row-head">
@@ -419,24 +404,39 @@ function paymentPanel() {
         <span class="badge warn">${money(order.amount_rub)}</span>
       </div>
       <div class="subtle-card">
-        <strong>${yookassaReady ? "💳 ЮKassa почти готова" : "💳 Онлайн-оплата готовится"}</strong>
+        <strong>${yookassaReady ? "💳 Оплата через ЮKassa" : "💳 Онлайн-оплата готовится"}</strong>
         <div class="row-meta">
           ${
             yookassaReady
-              ? "Данные магазина добавлены. Осталось подключить создание платежей и webhook."
+              ? "Нажмите кнопку оплаты. После успешного платежа подписка активируется автоматически."
               : "Пока оплата проходит через ручную проверку. Поля ЮKassa уже подготовлены в настройках сервера."
           }
         </div>
       </div>
-      <div class="copy-box">${escapeHtml(details).replaceAll("\n", "<br />")}</div>
-      <div class="field">
-        <label for="proofText">Данные платежа или комментарий</label>
-        <textarea id="proofText" placeholder="Например: оплатил с карты **** 1234, время 18:40"></textarea>
-      </div>
-      <div class="actions compact-actions">
-        <button class="btn primary" data-submit-proof="${order.id}">✅ Отправить</button>
-        <button class="btn ghost" data-clear-order>Закрыть</button>
-      </div>
+      ${
+        yookassaReady
+          ? `
+            <div class="actions compact-actions">
+              ${
+                paymentUrl
+                  ? `<button class="btn primary" data-pay-url="${escapeHtml(paymentUrl)}">💳 Перейти к оплате</button>`
+                  : `<button class="btn primary" data-buy="${escapeHtml(order.tariff_code)}">💳 Создать ссылку оплаты</button>`
+              }
+              <button class="btn ghost" data-refresh>🔄 Проверить</button>
+            </div>
+          `
+          : `
+            <div class="copy-box">${escapeHtml(details).replaceAll("\n", "<br />")}</div>
+            <div class="field">
+              <label for="proofText">Данные платежа или комментарий</label>
+              <textarea id="proofText" placeholder="Например: оплатил с карты **** 1234, время 18:40"></textarea>
+            </div>
+            <div class="actions compact-actions">
+              <button class="btn primary" data-submit-proof="${order.id}">✅ Отправить</button>
+              <button class="btn ghost" data-clear-order>Закрыть</button>
+            </div>
+          `
+      }
     </section>
   `;
 }
@@ -448,7 +448,11 @@ function plansView() {
       <section class="panel tight">
         <p class="eyebrow">💳 Тарифы</p>
         <h2 class="title">Выберите срок доступа</h2>
-        <p class="subtitle">После оплаты админ подтвердит платёж, и Mini App покажет подписку для подключения.</p>
+        <p class="subtitle">${
+          state.me?.payment?.yookassaReady
+            ? "После оплаты через ЮKassa подписка активируется автоматически. Mini App покажет ссылку для подключения."
+            : "После оплаты админ подтвердит платёж, и Mini App покажет подписку для подключения."
+        }</p>
       </section>
       <div class="plan-grid">
         ${state.plans.map(planCard).join("")}
@@ -717,6 +721,12 @@ async function handleClick(event) {
     } else if (target.dataset.copySub !== undefined) {
       const url = state.me?.subscription?.subscriptionUrl;
       if (url) await copyText(url);
+    } else if (target.dataset.payUrl !== undefined) {
+      if (!target.dataset.payUrl) {
+        setToast("Ссылка оплаты ещё создаётся");
+        return;
+      }
+      openLink(target.dataset.payUrl);
     } else if (target.dataset.link) {
       openLink(target.dataset.link);
     } else if (target.dataset.buy) {
@@ -727,7 +737,7 @@ async function handleClick(event) {
       state.activeOrder = result.order;
       state.tab = "plans";
       await refresh();
-      setToast(result.created ? "Заказ создан" : "Заказ уже был создан");
+      setToast(result.payment ? "Заказ создан, можно оплатить" : result.created ? "Заказ создан" : "Заказ уже был создан");
     } else if (target.dataset.clearOrder !== undefined) {
       state.activeOrder = null;
       render();

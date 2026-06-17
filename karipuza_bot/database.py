@@ -51,6 +51,10 @@ class Database:
                     duration_days INTEGER NOT NULL,
                     amount_rub INTEGER NOT NULL,
                     status TEXT NOT NULL,
+                    payment_provider TEXT,
+                    payment_id TEXT,
+                    payment_url TEXT,
+                    payment_status TEXT,
                     proof_type TEXT,
                     proof_file_id TEXT,
                     proof_text TEXT,
@@ -61,6 +65,9 @@ class Database:
 
                 CREATE INDEX IF NOT EXISTS idx_orders_status
                 ON orders(status, created_at DESC);
+
+                CREATE INDEX IF NOT EXISTS idx_orders_payment_id
+                ON orders(payment_id);
 
                 CREATE TABLE IF NOT EXISTS tickets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,7 +105,26 @@ class Database:
                 );
                 """
             )
+            await self._migrate_orders(db)
             await db.commit()
+
+    async def _migrate_orders(self, db: aiosqlite.Connection) -> None:
+        cursor = await db.execute("PRAGMA table_info(orders)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        for name in (
+            "payment_provider",
+            "payment_id",
+            "payment_url",
+            "payment_status",
+        ):
+            if name not in columns:
+                await db.execute(f"ALTER TABLE orders ADD COLUMN {name} TEXT")
+        await db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_orders_payment_id
+            ON orders(payment_id)
+            """
+        )
 
     async def ensure_user(
         self, tg_id: int, username: str | None, first_name: str | None
@@ -255,6 +281,68 @@ class Database:
                 (order_id,),
             )
             return await cursor.fetchone()
+
+    async def get_order_by_payment_id(self, payment_id: str) -> aiosqlite.Row | None:
+        async with self.connect() as db:
+            cursor = await db.execute(
+                """
+                SELECT orders.*, users.username, users.first_name
+                FROM orders
+                JOIN users ON users.tg_id = orders.tg_id
+                WHERE orders.payment_id = ?
+                """,
+                (payment_id,),
+            )
+            return await cursor.fetchone()
+
+    async def attach_order_payment(
+        self,
+        order_id: int,
+        *,
+        provider: str,
+        payment_id: str,
+        payment_url: str | None,
+        payment_status: str | None,
+    ) -> bool:
+        async with self.connect() as db:
+            cursor = await db.execute(
+                """
+                UPDATE orders SET
+                    payment_provider = ?,
+                    payment_id = ?,
+                    payment_url = ?,
+                    payment_status = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    provider,
+                    payment_id,
+                    payment_url,
+                    payment_status,
+                    int(time.time()),
+                    order_id,
+                ),
+            )
+            await db.commit()
+            return cursor.rowcount == 1
+
+    async def set_order_payment_status(
+        self,
+        order_id: int,
+        *,
+        payment_status: str,
+    ) -> bool:
+        async with self.connect() as db:
+            cursor = await db.execute(
+                """
+                UPDATE orders SET payment_status = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (payment_status, int(time.time()), order_id),
+            )
+            await db.commit()
+            return cursor.rowcount == 1
 
     async def submit_order_proof(
         self,

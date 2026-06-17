@@ -74,7 +74,11 @@ class Settings:
 
     @property
     def yookassa_ready(self) -> bool:
-        return bool(self.yookassa_shop_id and self.yookassa_secret_key)
+        return bool(
+            self.yookassa_shop_id
+            and self.yookassa_secret_key
+            and self.yookassa_return_url
+        )
 
 
 settings = Settings(

@@ -18,6 +18,7 @@ from aiohttp import web
 from .config import TARIFFS, TARIFFS_BY_CODE, Settings, settings, validate_settings
 from .database import Database
 from .remnawave import RemnawaveClient, Subscription
+from .yookassa import YooKassaClient, YooKassaError
 
 LOGGER = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).with_name("web_static")
@@ -79,6 +80,14 @@ def local_subscription_to_dict(user: Any | None) -> dict[str, Any] | None:
 def safe_text(value: Any, limit: int = MAX_TEXT_LENGTH) -> str:
     text = str(value or "").strip()
     return text[:limit]
+
+
+def payment_confirmation_url(payment: dict[str, Any] | None) -> str | None:
+    confirmation = (payment or {}).get("confirmation")
+    if not isinstance(confirmation, dict):
+        return None
+    url = confirmation.get("confirmation_url")
+    return str(url) if url else None
 
 
 def parse_init_data(raw: str, settings: Settings) -> AuthUser:
@@ -328,13 +337,207 @@ async def api_create_order(request: web.Request) -> web.Response:
         order = await db.get_order(order_id)
         created = True
 
+    payment: dict[str, Any] | None = None
+    app_settings: Settings = request.app["settings"]
+    if app_settings.yookassa_ready:
+        if order["payment_url"] and order["payment_status"] != "succeeded":
+            payment = {
+                "provider": "yookassa",
+                "paymentId": order["payment_id"],
+                "status": order["payment_status"],
+                "confirmationUrl": order["payment_url"],
+            }
+        else:
+            yookassa: YooKassaClient = request.app["yookassa"]
+            try:
+                created_payment = await yookassa.create_payment(
+                    order_id=int(order["id"]),
+                    tg_id=auth.tg_id,
+                    tariff_code=tariff.code,
+                    title=tariff.title,
+                    amount_rub=tariff.price_rub,
+                )
+            except YooKassaError as error:
+                LOGGER.exception("YooKassa payment creation failed")
+                await notify_admins(
+                    request.app,
+                    "<b>Ошибка ЮKassa</b>\n\n"
+                    f"Не удалось создать платеж по заказу <b>#{order['id']}</b>.\n"
+                    f"<pre>{html.escape(str(error))}</pre>",
+                )
+                raise web.HTTPBadGateway(
+                    text="Ошибка оплаты, обратитесь к админу"
+                ) from error
+
+            confirmation_url = payment_confirmation_url(created_payment)
+            if not confirmation_url:
+                raise web.HTTPBadGateway(text="YooKassa did not return payment URL")
+
+            await db.attach_order_payment(
+                int(order["id"]),
+                provider="yookassa",
+                payment_id=str(created_payment["id"]),
+                payment_url=confirmation_url,
+                payment_status=str(created_payment.get("status") or ""),
+            )
+            order = await db.get_order(int(order["id"]))
+            payment = {
+                "provider": "yookassa",
+                "paymentId": str(created_payment["id"]),
+                "status": str(created_payment.get("status") or ""),
+                "confirmationUrl": confirmation_url,
+            }
+
     return web.json_response(
         {
             "order": row_to_dict(order),
             "created": created,
             "paymentDetails": request.app["settings"].payment_details,
+            "payment": payment,
         },
         status=201 if created else 200,
+    )
+
+
+async def activate_paid_order(
+    app: web.Application,
+    order: Any,
+    *,
+    audit_action: str,
+) -> Subscription:
+    db: Database = app["db"]
+    remnawave: RemnawaveClient = app["remnawave"]
+    name = order["first_name"] or order["username"] or f"TG {order['tg_id']}"
+    subscription = await remnawave.activate(
+        tg_id=int(order["tg_id"]),
+        display_name=str(name),
+        days=int(order["duration_days"]),
+    )
+    await db.save_subscription(
+        int(order["tg_id"]),
+        remnawave_uuid=subscription.uuid,
+        subscription_url=subscription.subscription_url,
+        status=subscription.status,
+        expire_at=subscription.expire_at,
+        traffic_used=subscription.traffic_used,
+    )
+    await db.set_order_status(int(order["id"]), "APPROVED")
+    await db.audit(
+        audit_action,
+        entity_type="order",
+        entity_id=int(order["id"]),
+        details=f"payment_id={order['payment_id'] or ''}",
+    )
+    await telegram_send(
+        app,
+        int(order["tg_id"]),
+        "<b>Оплата прошла</b>\n\n"
+        f"Подписка активирована на {order['duration_days']} дней. "
+        "Откройте Mini App, скопируйте подписку и обновите профиль в Happ.",
+    )
+    return subscription
+
+
+async def api_yookassa_webhook(request: web.Request) -> web.Response:
+    yookassa: YooKassaClient = request.app["yookassa"]
+    if not yookassa.configured:
+        raise web.HTTPServiceUnavailable(text="YooKassa is not configured")
+
+    data = await read_json(request)
+    event = str(data.get("event") or "")
+    payment_object = data.get("object")
+    if not isinstance(payment_object, dict):
+        raise web.HTTPBadRequest(text="Payment object is required")
+
+    payment_id = str(payment_object.get("id") or "")
+    if not payment_id:
+        raise web.HTTPBadRequest(text="Payment id is required")
+
+    verified_payment = await yookassa.get_payment(payment_id)
+    verified_status = str(verified_payment.get("status") or "")
+    metadata = verified_payment.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    db: Database = request.app["db"]
+    order = None
+    raw_order_id = metadata.get("order_id")
+    if raw_order_id:
+        try:
+            order = await db.get_order(int(raw_order_id))
+        except (TypeError, ValueError):
+            order = None
+    if not order:
+        order = await db.get_order_by_payment_id(payment_id)
+    if not order:
+        raise web.HTTPNotFound(text="Order not found")
+
+    if not order["payment_id"]:
+        await db.attach_order_payment(
+            int(order["id"]),
+            provider="yookassa",
+            payment_id=payment_id,
+            payment_url=payment_confirmation_url(verified_payment),
+            payment_status=verified_status,
+        )
+        order = await db.get_order(int(order["id"]))
+
+    if order["payment_id"] and order["payment_id"] != payment_id:
+        raise web.HTTPBadRequest(text="Payment does not match order")
+
+    await db.set_order_payment_status(int(order["id"]), payment_status=verified_status)
+
+    if event != "payment.succeeded":
+        return web.json_response({"ok": True, "ignored": True})
+    if verified_status != "succeeded" or not verified_payment.get("paid"):
+        return web.json_response({"ok": True, "waiting": True})
+
+    expected_amount = f"{int(order['amount_rub']):.2f}"
+    actual_amount = str((verified_payment.get("amount") or {}).get("value") or "")
+    if actual_amount != expected_amount:
+        await notify_admins(
+            request.app,
+            "<b>ЮKassa: сумма платежа не совпала</b>\n\n"
+            f"Заказ: <b>#{order['id']}</b>\n"
+            f"Ожидали: <b>{expected_amount} ₽</b>\n"
+            f"Получили: <b>{html.escape(actual_amount)} ₽</b>\n"
+            f"Payment ID: <code>{html.escape(payment_id)}</code>",
+        )
+        raise web.HTTPBadRequest(text="Payment amount mismatch")
+
+    if order["status"] == "APPROVED":
+        return web.json_response({"ok": True, "alreadyApproved": True})
+
+    if order["status"] == "WAITING_PAYMENT":
+        claimed = await db.transition_order_status(
+            int(order["id"]),
+            expected_status="WAITING_PAYMENT",
+            new_status="PROCESSING",
+        )
+        if not claimed:
+            order = await db.get_order(int(order["id"]))
+    elif order["status"] != "PROCESSING":
+        return web.json_response({"ok": True, "ignoredStatus": order["status"]})
+
+    order = await db.get_order(int(order["id"]))
+    subscription = await activate_paid_order(
+        request.app,
+        order,
+        audit_action="YOOKASSA_PAYMENT_SUCCEEDED",
+    )
+    await notify_admins(
+        request.app,
+        "<b>ЮKassa: подписка выдана автоматически</b>\n\n"
+        f"Заказ: <b>#{order['id']}</b>\n"
+        f"Telegram ID: <code>{order['tg_id']}</code>\n"
+        f"Тариф: <b>{html.escape(str(order['title']))}</b>",
+    )
+    return web.json_response(
+        {
+            "ok": True,
+            "order": row_to_dict(await db.get_order(int(order["id"]))),
+            "subscription": subscription_to_dict(subscription),
+        }
     )
 
 
@@ -733,6 +936,7 @@ async def build_app(app_settings: Settings = settings) -> web.Application:
     app["settings"] = app_settings
     app["db"] = db
     app["remnawave"] = RemnawaveClient(app_settings)
+    app["yookassa"] = YooKassaClient(app_settings)
 
     app.router.add_get("/", index)
     app.router.add_get("/health", health)
@@ -742,6 +946,7 @@ async def build_app(app_settings: Settings = settings) -> web.Application:
     app.router.add_get("/api/plans", api_plans)
     app.router.add_post("/api/orders", api_create_order)
     app.router.add_post(r"/api/orders/{order_id:\d+}/proof", api_submit_order_proof)
+    app.router.add_post("/api/yookassa/webhook", api_yookassa_webhook)
     app.router.add_post("/api/support", api_create_ticket)
 
     app.router.add_get("/api/admin/summary", api_admin_summary)
