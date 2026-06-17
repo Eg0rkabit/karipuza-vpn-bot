@@ -6,12 +6,24 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import BotCommand, MenuButtonCommands
 
 from .config import settings, validate_settings
 from .database import Database
 from .handlers import create_router
 from .middleware import CallbackThrottleMiddleware
 from .remnawave import RemnawaveClient
+
+
+async def configure_bot_menu(bot: Bot) -> None:
+    await bot.set_my_commands(
+        [
+            BotCommand(command="menu", description="Главное меню"),
+            BotCommand(command="start", description="Перезапустить бота"),
+            BotCommand(command="cancel", description="Отменить текущее действие"),
+        ]
+    )
+    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
 
 async def run() -> None:
@@ -35,6 +47,7 @@ async def run() -> None:
 
     try:
         await bot.delete_webhook(drop_pending_updates=False)
+        await configure_bot_menu(bot)
         await dispatcher.start_polling(
             bot,
             allowed_updates=dispatcher.resolve_used_update_types(),
