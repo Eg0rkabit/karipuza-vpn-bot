@@ -261,8 +261,9 @@ function homeIntro() {
   return `
     <section class="panel home-hero">
       <p class="eyebrow">👋 Главная</p>
-      <h2 class="title">${active ? "Всё в порядке, VPN активен" : "Добро пожаловать в Karipuza"}</h2>
-      <p class="subtitle">Новости сервиса, быстрые действия и важные уведомления будут здесь.</p>
+      <h2 class="title">${active ? "Всё в порядке, VPN активен" : "Добро пожаловать в Karipuza VPN!"}</h2>
+      <p class="subtitle">Здесь ты можешь быстро подключить удобный VPN для своих устройств. Karipuza VPN помогает сохранить приватность, пользоваться интернетом стабильнее и подключаться без проблем.</p>
+      <p class="subtitle">Наша гордость — твоя безопасность и удобство! 💫</p>
       <div class="quick-actions compact-actions">
         <button class="btn primary" data-tab="${sub ? "subscription" : "plans"}">${sub ? "🔑 Подписка" : "💳 Купить"}</button>
         <button class="btn ghost" data-tab="support">💬 Поддержка</button>

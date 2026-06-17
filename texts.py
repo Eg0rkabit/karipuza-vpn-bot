@@ -8,19 +8,21 @@ BTN_MENU = "🏠 Главное меню"
 BTN_ADMIN = "🛠 Админка"
 
 WELCOME_TEXT = (
-    "👋 <b>Karipuza VPN — быстрый доступ к свободному интернету</b>\n\n"
-    "Подключение занимает пару минут: выберите тариф, получите ссылку подписки "
-    "и добавьте её в Hiddify.\n\n"
-    "Без сложных настроек, лишних действий и ожидания — всё можно сделать прямо через бота.\n\n"
+    "<b>Karipuza VPN — быстрый доступ к свободному интернету</b>\n\n"
+    "👋 Добро пожаловать в Karipuza VPN!\n\n"
+    "Здесь ты можешь быстро подключить удобный VPN для своих устройств. "
+    "Karipuza VPN помогает сохранить приватность, пользоваться интернетом "
+    "стабильнее и подключаться без проблем.\n\n"
+    "Наша гордость — твоя безопасность и удобство! 💫\n\n"
     "Выберите действие в меню ниже:"
 )
 
 INSTRUCTION_TEXT = (
     "📲 <b>Инструкция подключения</b>\n\n"
     "1. Установите <b>Hiddify</b> из официального источника:\n"
-    "• <a href=\"https://apps.apple.com/us/app/hiddify-proxy-vpn/id6596777532\">App Store</a> — iPhone / iPad\n"
-    "• <a href=\"https://play.google.com/store/apps/details?id=app.hiddify.com\">Google Play</a> — Android\n"
-    "• <a href=\"https://github.com/hiddify/hiddify-app\">Windows</a> — ПК\n"
+    '• <a href="https://apps.apple.com/us/app/hiddify-proxy-vpn/id6596777532">App Store</a> — iPhone / iPad\n'
+    '• <a href="https://play.google.com/store/apps/details?id=app.hiddify.com">Google Play</a> — Android\n'
+    '• <a href="https://github.com/hiddify/hiddify-app">Windows</a> — ПК\n'
     "2. В боте нажмите <b>🔗 Моя подписка</b>.\n"
     "3. Нажмите кнопку <b>📋 Скопировать подписку</b> или <b>📄 Показать подписку</b>.\n"
     "4. Откройте Hiddify.\n"
