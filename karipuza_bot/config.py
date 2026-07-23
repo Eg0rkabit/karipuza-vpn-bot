@@ -43,6 +43,7 @@ TARIFFS_BY_CODE = {tariff.code: tariff for tariff in TARIFFS}
 @dataclass(frozen=True, slots=True)
 class Settings:
     bot_token: str
+    bot_username: str
     admin_ids: tuple[int, ...]
     database_path: Path
 
@@ -51,6 +52,10 @@ class Settings:
     webapp_port: int
     webapp_dev_auth: bool
     webapp_auth_ttl_seconds: int
+    mobile_auth_ttl_seconds: int
+    mobile_session_ttl_days: int
+    mobile_subscription_max_bytes: int
+    mobile_subscription_allowed_hosts: tuple[str, ...]
 
     remnawave_url: str
     remnawave_api_token: str
@@ -83,6 +88,7 @@ class Settings:
 
 settings = Settings(
     bot_token=os.getenv("BOT_TOKEN", "").strip(),
+    bot_username=os.getenv("BOT_USERNAME", "").strip().lstrip("@"),
     admin_ids=_csv_ints(os.getenv("ADMIN_IDS", "")),
     database_path=Path(
         os.getenv("DATABASE_PATH", "/opt/karipuza-bot/data/karipuza.db")
@@ -93,6 +99,14 @@ settings = Settings(
     webapp_dev_auth=os.getenv("WEBAPP_DEV_AUTH", "").strip().lower()
     in {"1", "true", "yes", "on"},
     webapp_auth_ttl_seconds=int(os.getenv("WEBAPP_AUTH_TTL_SECONDS", "86400")),
+    mobile_auth_ttl_seconds=int(os.getenv("MOBILE_AUTH_TTL_SECONDS", "600")),
+    mobile_session_ttl_days=int(os.getenv("MOBILE_SESSION_TTL_DAYS", "180")),
+    mobile_subscription_max_bytes=int(
+        os.getenv("MOBILE_SUBSCRIPTION_MAX_BYTES", "2097152")
+    ),
+    mobile_subscription_allowed_hosts=_csv_strings(
+        os.getenv("MOBILE_SUBSCRIPTION_ALLOWED_HOSTS", "sub.karipuza.ru").lower()
+    ),
     remnawave_url=os.getenv("REMNAWAVE_URL", "http://127.0.0.1:3002")
     .strip()
     .rstrip("/"),

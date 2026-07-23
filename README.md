@@ -1,18 +1,19 @@
 # Karipaza Froxy
 
-Telegram-бот и Mini App для продажи и управления подписками Karipaza Froxy
-через Remnawave.
+Telegram-бот, Mini App и Android-клиент для управления подписками Karipaza
+Froxy через Remnawave.
 
 ## Возможности
 
 - единое inline-меню без лишних сообщений;
 - тарифы на 1, 3, 6 и 12 месяцев;
-- оплата через ЮKassa в Mini App с запасным ручным режимом;
+- подготовленные тарифы; онлайн-оплата через Platega будет добавлена позже;
 - автоматическое создание и продление подписки в Remnawave;
 - ссылка и QR-код подписки для Happ;
 - встроенная поддержка с обращениями и ответами администратора;
 - админ-панель с платежами, пользователями и состоянием Remnawave;
 - Telegram Mini App с главной страницей, новостями, тарифами и админскими действиями;
+- Android-приложение с входом через Telegram и системным VPN;
 - защита от частого нажатия кнопок;
 - подробные ошибки отправляются администраторам, пользователю показывается простой текст.
 
@@ -27,6 +28,7 @@ karipuza_bot/handlers.py  сценарии Telegram-бота
 karipuza_bot/ui.py        тексты и клавиатуры
 karipuza_bot/webapp.py    backend Telegram Mini App
 karipuza_bot/web_static/  интерфейс Mini App
+android-app/              нативный Android-клиент
 ```
 
 ## Настройка
@@ -45,55 +47,14 @@ ADMIN_IDS=ваш_telegram_id
 REMNAWAVE_API_TOKEN=api_токен_из_Remnawave
 REMNAWAVE_SQUAD_UUIDS=uuid_внутренней_группы
 PAYMENT_DETAILS=реквизиты_для_оплаты
+BOT_USERNAME=имя_бота_без_собаки
 ```
 
 Несколько администраторов и групп указываются через запятую.
 
-Поля для онлайн-оплаты через ЮKassa:
-
-```env
-YOOKASSA_SHOP_ID=
-YOOKASSA_SECRET_KEY=
-YOOKASSA_RETURN_URL=https://app.karipuza.ru
-```
-
-Пока эти значения пустые, оплата остаётся ручной: пользователь отправляет данные
-платежа, администратор подтверждает заказ.
-
-### Как подключить ЮKassa
-
-Mini App создаёт платеж в ЮKassa, отправляет пользователя на страницу оплаты и
-после webhook `payment.succeeded` автоматически выдаёт подписку в Remnawave.
-Для включения нужны:
-
-1. `shopId` магазина ЮKassa.
-2. Секретный ключ API из личного кабинета ЮKassa.
-3. HTTPS-адрес Mini App, обычно `https://app.karipuza.ru`.
-
-В `.env`:
-
-```env
-YOOKASSA_SHOP_ID=ваш_shopId
-YOOKASSA_SECRET_KEY=секретный_ключ
-YOOKASSA_RETURN_URL=https://app.karipuza.ru
-```
-
-В личном кабинете ЮKassa в разделе HTTP-уведомлений добавьте:
-
-```text
-URL: https://app.karipuza.ru/api/yookassa/webhook
-Событие: payment.succeeded
-```
-
-После изменения `.env` перезапустите сервис:
-
-```bash
-systemctl restart karipuza-bot
-systemctl restart karipuza-webapp
-```
-
-Webhook для ЮKassa должен быть на HTTPS. У ЮKassa для HTTP-уведомлений подходят
-порты `443` или `8443`, поэтому текущий домен Mini App на HTTPS подходит.
+Онлайн-оплата сейчас намеренно выключена. Platega будет подключена после
+получения тестовых ключей, точной API-документации и адресов webhook от
+менеджера. Секретный ключ платёжной системы будет храниться только на VPS.
 
 ## Запуск
 
@@ -143,6 +104,17 @@ Let's Encrypt, настраивает nginx и добавляет кнопку M
 ```bash
 journalctl -u karipuza-webapp -f
 ```
+
+## Android
+
+Приложение находится в `android-app/`. Оно не содержит API-токен Remnawave и не
+получает открытую ссылку подписки. Пользователь подтверждает новое устройство в
+Telegram, после чего backend выдаёт отдельный отзывной токен и проксирует только
+его личную sing-box-конфигурацию.
+
+APK собирается workflow `Android APK` в GitHub Actions. Первая версия использует
+debug-подпись только для закрытого тестирования; перед публичной раздачей нужен
+постоянный release-ключ.
 
 Администратор может отвечать на обращения двумя способами:
 

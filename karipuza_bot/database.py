@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hmac
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -100,6 +101,40 @@ class Database:
                     details TEXT,
                     created_at INTEGER NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS mobile_auth_requests (
+                    request_id TEXT PRIMARY KEY,
+                    secret_hash TEXT NOT NULL,
+                    device_id TEXT NOT NULL,
+                    device_name TEXT NOT NULL DEFAULT '',
+                    platform TEXT NOT NULL DEFAULT 'ANDROID',
+                    status TEXT NOT NULL DEFAULT 'PENDING',
+                    tg_id INTEGER REFERENCES users(tg_id),
+                    expires_at INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    approved_at INTEGER,
+                    consumed_at INTEGER
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_mobile_auth_expires
+                ON mobile_auth_requests(expires_at);
+
+                CREATE TABLE IF NOT EXISTS mobile_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tg_id INTEGER NOT NULL REFERENCES users(tg_id),
+                    token_hash TEXT NOT NULL UNIQUE,
+                    device_id TEXT NOT NULL,
+                    device_name TEXT NOT NULL DEFAULT '',
+                    platform TEXT NOT NULL DEFAULT 'ANDROID',
+                    expires_at INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    last_used_at INTEGER NOT NULL,
+                    revoked_at INTEGER,
+                    UNIQUE(tg_id, device_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_mobile_sessions_device
+                ON mobile_sessions(device_id);
                 """
             )
             await self._migrate_orders(db)
@@ -214,6 +249,237 @@ class Database:
                 (int(time.time()), tg_id),
             )
             await db.commit()
+
+    async def create_mobile_auth_request(
+        self,
+        *,
+        request_id: str,
+        secret_hash: str,
+        device_id: str,
+        device_name: str,
+        platform: str,
+        expires_at: int,
+    ) -> None:
+        now = int(time.time())
+        async with self.connect() as db:
+            await db.execute(
+                """
+                INSERT INTO mobile_auth_requests (
+                    request_id, secret_hash, device_id, device_name, platform,
+                    status, expires_at, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?)
+                """,
+                (
+                    request_id,
+                    secret_hash,
+                    device_id,
+                    device_name,
+                    platform,
+                    expires_at,
+                    now,
+                ),
+            )
+            await db.execute(
+                """
+                DELETE FROM mobile_auth_requests
+                WHERE expires_at < ? AND status IN ('PENDING', 'EXPIRED')
+                """,
+                (now - 86400,),
+            )
+            await db.commit()
+
+    async def get_mobile_auth_request(
+        self, request_id: str
+    ) -> aiosqlite.Row | None:
+        async with self.connect() as db:
+            cursor = await db.execute(
+                "SELECT * FROM mobile_auth_requests WHERE request_id = ?",
+                (request_id,),
+            )
+            return await cursor.fetchone()
+
+    async def approve_mobile_auth_request(
+        self,
+        request_id: str,
+        tg_id: int,
+    ) -> str:
+        now = int(time.time())
+        async with self.connect() as db:
+            await db.execute("BEGIN IMMEDIATE")
+            cursor = await db.execute(
+                "SELECT * FROM mobile_auth_requests WHERE request_id = ?",
+                (request_id,),
+            )
+            request = await cursor.fetchone()
+            if not request:
+                await db.rollback()
+                return "NOT_FOUND"
+            if int(request["expires_at"]) <= now:
+                await db.execute(
+                    """
+                    UPDATE mobile_auth_requests SET status = 'EXPIRED'
+                    WHERE request_id = ? AND status != 'CONSUMED'
+                    """,
+                    (request_id,),
+                )
+                await db.commit()
+                return "EXPIRED"
+            if request["status"] in {"APPROVED", "CONSUMED"}:
+                await db.rollback()
+                if int(request["tg_id"] or 0) == tg_id:
+                    return "ALREADY_APPROVED"
+                return "CLAIMED"
+            if request["status"] != "PENDING":
+                await db.rollback()
+                return str(request["status"])
+
+            cursor = await db.execute(
+                """
+                UPDATE mobile_auth_requests SET
+                    status = 'APPROVED',
+                    tg_id = ?,
+                    approved_at = ?
+                WHERE request_id = ? AND status = 'PENDING'
+                """,
+                (tg_id, now, request_id),
+            )
+            await db.commit()
+            return "APPROVED" if cursor.rowcount == 1 else "CLAIMED"
+
+    async def consume_mobile_auth_request(
+        self,
+        *,
+        request_id: str,
+        secret_hash: str,
+        token_hash: str,
+        session_expires_at: int,
+    ) -> tuple[str, int | None]:
+        now = int(time.time())
+        async with self.connect() as db:
+            await db.execute("BEGIN IMMEDIATE")
+            cursor = await db.execute(
+                "SELECT * FROM mobile_auth_requests WHERE request_id = ?",
+                (request_id,),
+            )
+            request = await cursor.fetchone()
+            if not request:
+                await db.rollback()
+                return "NOT_FOUND", None
+            if not hmac.compare_digest(str(request["secret_hash"]), secret_hash):
+                await db.rollback()
+                return "INVALID_SECRET", None
+            if int(request["expires_at"]) <= now:
+                if request["status"] != "CONSUMED":
+                    await db.execute(
+                        """
+                        UPDATE mobile_auth_requests SET status = 'EXPIRED'
+                        WHERE request_id = ?
+                        """,
+                        (request_id,),
+                    )
+                    await db.commit()
+                else:
+                    await db.rollback()
+                return "EXPIRED", None
+            if request["status"] == "PENDING":
+                await db.rollback()
+                return "PENDING", None
+            if request["status"] not in {"APPROVED", "CONSUMED"}:
+                await db.rollback()
+                return str(request["status"]), None
+
+            tg_id = int(request["tg_id"])
+            await db.execute(
+                """
+                UPDATE mobile_sessions SET revoked_at = ?
+                WHERE device_id = ? AND tg_id != ? AND revoked_at IS NULL
+                """,
+                (now, request["device_id"], tg_id),
+            )
+            await db.execute(
+                """
+                INSERT INTO mobile_sessions (
+                    tg_id, token_hash, device_id, device_name, platform,
+                    expires_at, created_at, last_used_at, revoked_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                ON CONFLICT(tg_id, device_id) DO UPDATE SET
+                    token_hash = excluded.token_hash,
+                    device_name = excluded.device_name,
+                    platform = excluded.platform,
+                    expires_at = excluded.expires_at,
+                    last_used_at = excluded.last_used_at,
+                    revoked_at = NULL
+                """,
+                (
+                    tg_id,
+                    token_hash,
+                    request["device_id"],
+                    request["device_name"],
+                    request["platform"],
+                    session_expires_at,
+                    now,
+                    now,
+                ),
+            )
+            await db.execute(
+                """
+                UPDATE mobile_auth_requests SET
+                    status = 'CONSUMED',
+                    consumed_at = COALESCE(consumed_at, ?)
+                WHERE request_id = ?
+                """,
+                (now, request_id),
+            )
+            await db.commit()
+            return "AUTHORIZED", tg_id
+
+    async def get_mobile_session(
+        self, token_hash: str
+    ) -> aiosqlite.Row | None:
+        now = int(time.time())
+        async with self.connect() as db:
+            cursor = await db.execute(
+                """
+                SELECT
+                    mobile_sessions.*,
+                    users.username,
+                    users.first_name
+                FROM mobile_sessions
+                JOIN users ON users.tg_id = mobile_sessions.tg_id
+                WHERE mobile_sessions.token_hash = ?
+                  AND mobile_sessions.revoked_at IS NULL
+                  AND mobile_sessions.expires_at > ?
+                """,
+                (token_hash, now),
+            )
+            return await cursor.fetchone()
+
+    async def touch_mobile_session(self, session_id: int) -> None:
+        await self._update_mobile_session_timestamp(session_id, int(time.time()))
+
+    async def _update_mobile_session_timestamp(
+        self, session_id: int, timestamp: int
+    ) -> None:
+        async with self.connect() as db:
+            await db.execute(
+                "UPDATE mobile_sessions SET last_used_at = ? WHERE id = ?",
+                (timestamp, session_id),
+            )
+            await db.commit()
+
+    async def revoke_mobile_session(self, token_hash: str) -> bool:
+        async with self.connect() as db:
+            cursor = await db.execute(
+                """
+                UPDATE mobile_sessions SET revoked_at = ?
+                WHERE token_hash = ? AND revoked_at IS NULL
+                """,
+                (int(time.time()), token_hash),
+            )
+            await db.commit()
+            return cursor.rowcount == 1
 
     async def create_order(
         self,

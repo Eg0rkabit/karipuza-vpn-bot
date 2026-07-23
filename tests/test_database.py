@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -164,3 +165,73 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(ticket["status"], "OPEN")
         self.assertEqual((await self.db.stats())["tickets"], 1)
+
+    async def test_mobile_auth_creates_and_revokes_device_session(self) -> None:
+        expires_at = int(time.time()) + 600
+        await self.db.create_mobile_auth_request(
+            request_id="request-one",
+            secret_hash="secret-hash-one",
+            device_id="device-12345",
+            device_name="Pixel Test",
+            platform="ANDROID",
+            expires_at=expires_at,
+        )
+
+        self.assertEqual(
+            await self.db.approve_mobile_auth_request("request-one", 100),
+            "APPROVED",
+        )
+        status, tg_id = await self.db.consume_mobile_auth_request(
+            request_id="request-one",
+            secret_hash="secret-hash-one",
+            token_hash="token-hash-one",
+            session_expires_at=int(time.time()) + 86400,
+        )
+
+        self.assertEqual((status, tg_id), ("AUTHORIZED", 100))
+        session = await self.db.get_mobile_session("token-hash-one")
+        self.assertEqual(session["device_name"], "Pixel Test")
+        self.assertTrue(await self.db.revoke_mobile_session("token-hash-one"))
+        self.assertIsNone(await self.db.get_mobile_session("token-hash-one"))
+
+    async def test_mobile_auth_waits_for_telegram_confirmation(self) -> None:
+        await self.db.create_mobile_auth_request(
+            request_id="request-pending",
+            secret_hash="secret-hash-pending",
+            device_id="device-pending",
+            device_name="Android",
+            platform="ANDROID",
+            expires_at=int(time.time()) + 600,
+        )
+
+        status, tg_id = await self.db.consume_mobile_auth_request(
+            request_id="request-pending",
+            secret_hash="secret-hash-pending",
+            token_hash="token-hash-pending",
+            session_expires_at=int(time.time()) + 86400,
+        )
+
+        self.assertEqual((status, tg_id), ("PENDING", None))
+
+    async def test_mobile_auth_rejects_wrong_or_expired_secret(self) -> None:
+        await self.db.create_mobile_auth_request(
+            request_id="request-expired",
+            secret_hash="correct-hash",
+            device_id="device-expired",
+            device_name="Android",
+            platform="ANDROID",
+            expires_at=int(time.time()) - 1,
+        )
+
+        wrong_status, _ = await self.db.consume_mobile_auth_request(
+            request_id="request-expired",
+            secret_hash="wrong-hash",
+            token_hash="unused",
+            session_expires_at=int(time.time()) + 86400,
+        )
+        expired_status = await self.db.approve_mobile_auth_request(
+            "request-expired", 100
+        )
+
+        self.assertEqual(wrong_status, "INVALID_SECRET")
+        self.assertEqual(expired_status, "EXPIRED")

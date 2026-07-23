@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import html
 import json
 import logging
+import re
+import secrets
 import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlsplit
 
 import aiohttp
 from aiohttp import web
@@ -23,6 +26,8 @@ from .yookassa import YooKassaClient, YooKassaError
 LOGGER = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).with_name("web_static")
 MAX_TEXT_LENGTH = 3500
+MOBILE_DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._~-]{10,128}$")
+MOBILE_USER_AGENT = "sing-box/1.13.14 Karipaza-Froxy/0.1 (Android)"
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +80,60 @@ def local_subscription_to_dict(user: Any | None) -> dict[str, Any] | None:
         "isActive": user["vpn_status"] == "ACTIVE" and expire_at > int(time.time()),
         "cached": True,
     }
+
+
+def mobile_subscription_to_dict(
+    subscription: Subscription | None,
+    local_user: Any | None,
+) -> dict[str, Any] | None:
+    payload = (
+        subscription_to_dict(subscription)
+        or local_subscription_to_dict(local_user)
+    )
+    if payload:
+        payload.pop("subscriptionUrl", None)
+    return payload
+
+
+def sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def derive_mobile_token(bot_token: str, request_id: str, secret: str) -> str:
+    digest = hmac.new(
+        bot_token.encode(),
+        f"{request_id}:{secret}".encode(),
+        hashlib.sha256,
+    ).digest()
+    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
+
+def enforce_mobile_rate_limit(
+    request: web.Request,
+    key: str,
+    *,
+    limit: int,
+    window_seconds: int,
+) -> None:
+    now = time.monotonic()
+    buckets: dict[str, list[float]] = request.app["mobile_rate_limits"]
+    recent = [
+        timestamp
+        for timestamp in buckets.get(key, [])
+        if timestamp > now - window_seconds
+    ]
+    if len(recent) >= limit:
+        raise web.HTTPTooManyRequests(text="Too many login attempts")
+    recent.append(now)
+    buckets[key] = recent
+
+    if len(buckets) > 5000:
+        cutoff = now - window_seconds
+        request.app["mobile_rate_limits"] = {
+            bucket_key: timestamps
+            for bucket_key, timestamps in buckets.items()
+            if timestamps and timestamps[-1] > cutoff
+        }
 
 
 def safe_text(value: Any, limit: int = MAX_TEXT_LENGTH) -> str:
@@ -166,7 +225,7 @@ async def require_auth(request: web.Request) -> AuthUser:
 async def read_json(request: web.Request) -> dict[str, Any]:
     try:
         data = await request.json()
-    except json.JSONDecodeError as error:
+    except (json.JSONDecodeError, ValueError) as error:
         raise web.HTTPBadRequest(text="Bad JSON") from error
     if not isinstance(data, dict):
         raise web.HTTPBadRequest(text="JSON object expected")
@@ -228,10 +287,10 @@ async def sync_subscription(
     try:
         subscription = await remnawave.get_by_telegram_id(auth.tg_id)
     except Exception:
-        LOGGER.exception("Mini App subscription sync failed for %s", auth.tg_id)
+        LOGGER.exception("Client subscription sync failed for %s", auth.tg_id)
         await notify_admins(
             request.app,
-            "<b>Ошибка Mini App</b>\n\n"
+            "<b>Ошибка клиентского приложения</b>\n\n"
             f"Контекст: синхронизация подписки пользователя {auth.tg_id}\n"
             f"<pre>{html.escape(traceback.format_exc()[-2500:])}</pre>",
         )
@@ -258,6 +317,296 @@ async def index(request: web.Request) -> web.StreamResponse:
 
 async def health(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "service": "karipuza-mini-app"})
+
+
+def no_store(response: web.StreamResponse) -> web.StreamResponse:
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
+async def telegram_bot_username(app: web.Application) -> str:
+    app_settings: Settings = app["settings"]
+    if app_settings.bot_username:
+        return app_settings.bot_username
+    cached = app.get("bot_username")
+    if cached:
+        return str(cached)
+
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(
+            f"https://api.telegram.org/bot{app_settings.bot_token}/getMe"
+        ) as response:
+            payload = await response.json(content_type=None)
+            if response.status != 200 or not payload.get("ok"):
+                raise web.HTTPServiceUnavailable(
+                    text="Telegram login is temporarily unavailable"
+                )
+    username = str((payload.get("result") or {}).get("username") or "").lstrip("@")
+    if not username:
+        raise web.HTTPServiceUnavailable(text="Telegram bot username is unavailable")
+    app["bot_username"] = username
+    return username
+
+
+async def api_mobile_auth_start(request: web.Request) -> web.Response:
+    data = await read_json(request)
+    device_id = str(data.get("deviceId") or "").strip()
+    if not MOBILE_DEVICE_ID_PATTERN.fullmatch(device_id):
+        raise web.HTTPBadRequest(text="Invalid device id")
+    client_ip = request.headers.get("X-Real-IP") or request.remote or "unknown"
+    enforce_mobile_rate_limit(
+        request,
+        f"ip:{client_ip}",
+        limit=30,
+        window_seconds=60,
+    )
+    enforce_mobile_rate_limit(
+        request,
+        f"device:{device_id}",
+        limit=5,
+        window_seconds=60,
+    )
+    device_name = safe_text(data.get("deviceName"), 80) or "Android-устройство"
+    platform = str(data.get("platform") or "ANDROID").strip().upper()
+    if platform != "ANDROID":
+        raise web.HTTPBadRequest(text="Unsupported platform")
+
+    app_settings: Settings = request.app["settings"]
+    request_id = secrets.token_urlsafe(18)
+    secret = secrets.token_urlsafe(32)
+    expires_at = int(time.time()) + max(60, app_settings.mobile_auth_ttl_seconds)
+    db: Database = request.app["db"]
+    await db.create_mobile_auth_request(
+        request_id=request_id,
+        secret_hash=sha256_text(secret),
+        device_id=device_id,
+        device_name=device_name,
+        platform=platform,
+        expires_at=expires_at,
+    )
+    bot_username = await telegram_bot_username(request.app)
+    response = web.json_response(
+        {
+            "requestId": request_id,
+            "secret": secret,
+            "botUrl": f"https://t.me/{bot_username}?start=mobile_{request_id}",
+            "expiresAt": expires_at,
+            "pollAfterMs": 1500,
+        },
+        status=201,
+    )
+    return no_store(response)
+
+
+async def api_mobile_auth_complete(request: web.Request) -> web.Response:
+    data = await read_json(request)
+    request_id = str(data.get("requestId") or "").strip()
+    secret = str(data.get("secret") or "").strip()
+    if not request_id or len(request_id) > 80 or len(secret) < 20 or len(secret) > 160:
+        raise web.HTTPBadRequest(text="Invalid login request")
+
+    app_settings: Settings = request.app["settings"]
+    token = derive_mobile_token(app_settings.bot_token, request_id, secret)
+    session_expires_at = int(time.time()) + (
+        max(1, app_settings.mobile_session_ttl_days) * 86400
+    )
+    db: Database = request.app["db"]
+    status, _ = await db.consume_mobile_auth_request(
+        request_id=request_id,
+        secret_hash=sha256_text(secret),
+        token_hash=sha256_text(token),
+        session_expires_at=session_expires_at,
+    )
+    if status == "PENDING":
+        return no_store(
+            web.json_response({"status": "pending"}, status=202)
+        )
+    if status in {"EXPIRED", "NOT_FOUND"}:
+        return no_store(
+            web.json_response({"status": "expired"}, status=410)
+        )
+    if status != "AUTHORIZED":
+        raise web.HTTPUnauthorized(text="Invalid login request")
+
+    return no_store(
+        web.json_response(
+            {
+                "status": "authorized",
+                "token": token,
+                "expiresAt": session_expires_at,
+            }
+        )
+    )
+
+
+async def require_mobile_auth(
+    request: web.Request,
+) -> tuple[AuthUser, Any, str]:
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise web.HTTPUnauthorized(text="App login required")
+    token_hash = sha256_text(token.strip())
+    db: Database = request.app["db"]
+    session = await db.get_mobile_session(token_hash)
+    if not session:
+        raise web.HTTPUnauthorized(text="App session expired")
+
+    now = int(time.time())
+    if int(session["last_used_at"]) < now - 300:
+        await db.touch_mobile_session(int(session["id"]))
+    tg_id = int(session["tg_id"])
+    app_settings: Settings = request.app["settings"]
+    auth = AuthUser(
+        tg_id=tg_id,
+        username=session["username"],
+        first_name=session["first_name"],
+        is_admin=tg_id in app_settings.admin_ids,
+    )
+    return auth, session, token_hash
+
+
+async def api_mobile_me(request: web.Request) -> web.Response:
+    auth, session, _ = await require_mobile_auth(request)
+    subscription, local_user, sync_error = await sync_subscription(request, auth)
+    response = web.json_response(
+        {
+            "user": {
+                "tgId": auth.tg_id,
+                "username": auth.username,
+                "firstName": auth.first_name,
+            },
+            "device": {
+                "id": session["device_id"],
+                "name": session["device_name"],
+                "platform": session["platform"],
+            },
+            "subscription": mobile_subscription_to_dict(
+                subscription,
+                local_user,
+            ),
+            "syncError": sync_error,
+            "plans": [
+                {
+                    "code": tariff.code,
+                    "title": tariff.title,
+                    "days": tariff.days,
+                    "priceRub": tariff.price_rub,
+                    "badge": tariff.badge,
+                }
+                for tariff in TARIFFS
+            ],
+            "payment": {
+                "enabled": False,
+                "provider": None,
+                "message": "Оплата появится после подключения Platega.",
+            },
+        }
+    )
+    return no_store(response)
+
+
+def safe_header(value: Any, fallback: str) -> str:
+    text = safe_text(value, 80).encode("ascii", "ignore").decode().strip()
+    return text or fallback
+
+
+async def api_mobile_config(request: web.Request) -> web.Response:
+    auth, session, _ = await require_mobile_auth(request)
+    app_settings: Settings = request.app["settings"]
+    subscription, local_user, sync_error = await sync_subscription(request, auth)
+    payload = mobile_subscription_to_dict(subscription, local_user)
+    if not payload:
+        raise web.HTTPNotFound(text="Subscription not found")
+    if not payload.get("isActive"):
+        raise web.HTTPForbidden(text="Subscription is not active")
+
+    subscription_url = (
+        subscription.subscription_url
+        if subscription
+        else str(local_user["subscription_url"] or "")
+    )
+    parsed_url = urlsplit(subscription_url)
+    if parsed_url.scheme != "https" or not parsed_url.hostname:
+        LOGGER.error(
+            "Rejected mobile subscription URL for %s: %s",
+            auth.tg_id,
+            subscription_url,
+        )
+        raise web.HTTPBadGateway(text="Subscription configuration is unavailable")
+    allowed_hosts = {
+        host.lower()
+        for host in app_settings.mobile_subscription_allowed_hosts
+    }
+    if parsed_url.hostname.lower() not in allowed_hosts:
+        LOGGER.error(
+            "Rejected mobile subscription host for %s: %s",
+            auth.tg_id,
+            parsed_url.hostname,
+        )
+        raise web.HTTPBadGateway(text="Subscription configuration is unavailable")
+
+    timeout = aiohttp.ClientTimeout(total=25, connect=10)
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": MOBILE_USER_AGENT,
+        "x-hwid": str(session["device_id"]),
+        "x-device-os": "Android",
+        "x-device-model": safe_header(session["device_name"], "Android"),
+    }
+    try:
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as client:
+            async with client.get(
+                subscription_url,
+                allow_redirects=True,
+                max_redirects=3,
+            ) as upstream:
+                if upstream.status != 200:
+                    raise RuntimeError(
+                        f"subscription returned HTTP {upstream.status}"
+                    )
+                body = await upstream.content.read(
+                    app_settings.mobile_subscription_max_bytes + 1
+                )
+        if len(body) > app_settings.mobile_subscription_max_bytes:
+            raise RuntimeError("subscription response is too large")
+        config = json.loads(body.decode("utf-8-sig"))
+        if (
+            not isinstance(config, dict)
+            or not isinstance(config.get("outbounds"), list)
+            or not config["outbounds"]
+        ):
+            raise RuntimeError("subscription is not a sing-box configuration")
+    except Exception as error:
+        LOGGER.exception("Mobile configuration fetch failed for %s", auth.tg_id)
+        await notify_admins(
+            request.app,
+            "<b>Ошибка Android-приложения</b>\n\n"
+            f"Не удалось получить конфигурацию пользователя "
+            f"<code>{auth.tg_id}</code>.\n"
+            f"<pre>{html.escape(str(error))}</pre>",
+        )
+        raise web.HTTPBadGateway(
+            text="VPN configuration is temporarily unavailable"
+        ) from error
+
+    response = web.Response(
+        text=json.dumps(config, ensure_ascii=False, separators=(",", ":")),
+        content_type="application/json",
+        charset="utf-8",
+    )
+    if sync_error:
+        response.headers["X-Karipaza-Subscription-Source"] = "cache"
+    return no_store(response)
+
+
+async def api_mobile_logout(request: web.Request) -> web.Response:
+    _, _, token_hash = await require_mobile_auth(request)
+    db: Database = request.app["db"]
+    await db.revoke_mobile_session(token_hash)
+    return no_store(web.json_response({"ok": True}))
 
 
 async def api_me(request: web.Request) -> web.Response:
@@ -914,11 +1263,11 @@ async def error_middleware(
             )
         raise
     except Exception:
-        LOGGER.exception("Unhandled Mini App error")
+        LOGGER.exception("Unhandled client application error")
         if request.path.startswith("/api/"):
             await notify_admins(
                 request.app,
-                "<b>Ошибка Mini App</b>\n\n"
+                "<b>Ошибка клиентского приложения</b>\n\n"
                 f"Путь: <code>{html.escape(request.path)}</code>\n"
                 f"<pre>{html.escape(traceback.format_exc()[-2500:])}</pre>",
             )
@@ -937,6 +1286,7 @@ async def build_app(app_settings: Settings = settings) -> web.Application:
     app["db"] = db
     app["remnawave"] = RemnawaveClient(app_settings)
     app["yookassa"] = YooKassaClient(app_settings)
+    app["mobile_rate_limits"] = {}
 
     app.router.add_get("/", index)
     app.router.add_get("/health", health)
@@ -948,6 +1298,12 @@ async def build_app(app_settings: Settings = settings) -> web.Application:
     app.router.add_post(r"/api/orders/{order_id:\d+}/proof", api_submit_order_proof)
     app.router.add_post("/api/yookassa/webhook", api_yookassa_webhook)
     app.router.add_post("/api/support", api_create_ticket)
+
+    app.router.add_post("/api/mobile/auth/start", api_mobile_auth_start)
+    app.router.add_post("/api/mobile/auth/complete", api_mobile_auth_complete)
+    app.router.add_get("/api/mobile/me", api_mobile_me)
+    app.router.add_get("/api/mobile/config", api_mobile_config)
+    app.router.add_post("/api/mobile/logout", api_mobile_logout)
 
     app.router.add_get("/api/admin/summary", api_admin_summary)
     app.router.add_get("/api/admin/users", api_admin_users)

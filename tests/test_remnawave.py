@@ -45,6 +45,7 @@ class RemnawaveClientTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         settings = Settings(
             bot_token="token",
+            bot_username="test_bot",
             admin_ids=(1,),
             database_path=Path("test.db"),
             mini_app_url="https://app.example",
@@ -52,6 +53,10 @@ class RemnawaveClientTests(unittest.IsolatedAsyncioTestCase):
             webapp_port=8080,
             webapp_dev_auth=False,
             webapp_auth_ttl_seconds=86400,
+            mobile_auth_ttl_seconds=600,
+            mobile_session_ttl_days=180,
+            mobile_subscription_max_bytes=2097152,
+            mobile_subscription_allowed_hosts=("sub.karipuza.ru",),
             remnawave_url="http://127.0.0.1:3000",
             remnawave_api_token="api-token",
             remnawave_squad_uuids=("22222222-2222-2222-2222-222222222222",),

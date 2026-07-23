@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import io
 import logging
+import time
 import traceback
 from typing import Any
 
@@ -14,6 +15,8 @@ from aiogram.types import (
     BufferedInputFile,
     CallbackQuery,
     ErrorEvent,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     Message,
 )
 
@@ -136,11 +139,85 @@ def create_router(
     @router.message(Command("menu"))
     async def start(message: Message) -> None:
         await ensure_user(message)
+        command_payload = ""
+        if message.text and " " in message.text:
+            command_payload = message.text.split(maxsplit=1)[1].strip()
+        if command_payload.startswith("mobile_"):
+            request_id = command_payload.removeprefix("mobile_")
+            auth_request = await db.get_mobile_auth_request(request_id)
+            if (
+                not auth_request
+                or auth_request["status"] == "EXPIRED"
+                or int(auth_request["expires_at"]) <= int(time.time())
+            ):
+                await message.answer(
+                    "<b>Запрос на вход устарел</b>\n\n"
+                    "Вернитесь в приложение и нажмите «Войти через Telegram» ещё раз."
+                )
+                return
+            if auth_request["status"] in {"APPROVED", "CONSUMED"}:
+                if int(auth_request["tg_id"] or 0) == message.from_user.id:
+                    await message.answer(
+                        "<b>Вход уже подтверждён</b>\n\n"
+                        "Можно вернуться в приложение Karipaza Froxy."
+                    )
+                else:
+                    await message.answer(
+                        "<b>Запрос уже использован</b>\n\n"
+                        "Создайте новый запрос на вход в приложении."
+                    )
+                return
+
+            device_name = html.escape(
+                str(auth_request["device_name"] or "Android-устройство")
+            )
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Подтвердить вход",
+                            callback_data=f"mobile_auth:{request_id}",
+                        )
+                    ]
+                ]
+            )
+            await message.answer(
+                "<b>Вход в Karipaza Froxy</b>\n\n"
+                f"Устройство: <b>{device_name}</b>\n\n"
+                "Подтверждайте вход, только если вы сами открыли приложение.",
+                reply_markup=keyboard,
+            )
+            return
+
         await db.clear_session(message.from_user.id)
         await message.answer(
             ui.main_text(message.from_user.first_name),
             reply_markup=main_menu_keyboard(message.from_user.id),
         )
+
+    @router.callback_query(F.data.startswith("mobile_auth:"))
+    async def approve_mobile_auth(callback: CallbackQuery) -> None:
+        await ensure_user(callback)
+        request_id = str(callback.data or "").split(":", 1)[-1]
+        result = await db.approve_mobile_auth_request(
+            request_id,
+            callback.from_user.id,
+        )
+        if result in {"APPROVED", "ALREADY_APPROVED"}:
+            await callback.answer("Вход подтверждён")
+            if isinstance(callback.message, Message):
+                await callback.message.edit_text(
+                    "<b>Вход подтверждён</b>\n\n"
+                    "Вернитесь в Karipaza Froxy. Приложение завершит вход автоматически."
+                )
+            return
+        if result == "EXPIRED":
+            text = "Запрос устарел. Создайте новый в приложении."
+        elif result == "CLAIMED":
+            text = "Этот запрос уже подтверждён другим аккаунтом."
+        else:
+            text = "Запрос не найден. Создайте новый в приложении."
+        await callback.answer(text, show_alert=True)
 
     @router.message(Command("cancel"))
     async def cancel(message: Message) -> None:
