@@ -15,6 +15,10 @@
   --red: #ef6b6b;
   --blue: #6aa5ff;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1.08);
+  --motion-fast: 160ms;
+  --motion-base: 280ms;
   font-family:
     "Manrope", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -27,6 +31,7 @@
 html {
   min-height: 100%;
   background: var(--bg);
+  scroll-behavior: smooth;
 }
 
 body {
@@ -86,6 +91,30 @@ button {
     calc(env(safe-area-inset-bottom) + 78px);
 }
 
+.busy-bar {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 2px);
+  left: 50%;
+  z-index: 50;
+  width: min(220px, 58vw);
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(34, 193, 200, 0.18);
+  transform: translateX(-50%);
+}
+
+.busy-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--green));
+  box-shadow: 0 0 12px rgba(34, 193, 200, 0.65);
+  animation: busy-slide 1s var(--ease-out) infinite;
+}
+
 .loading {
   min-height: 70vh;
   display: grid;
@@ -132,6 +161,12 @@ button {
   object-fit: cover;
   margin: 0 auto;
   border: 1px solid var(--line);
+  animation: loading-float 2.2s ease-in-out infinite;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+
+.loading p {
+  animation: loading-fade 1.4s ease-in-out infinite alternate;
 }
 
 .topbar {
@@ -193,6 +228,31 @@ button {
   gap: 12px;
 }
 
+.view-enter > * {
+  opacity: 0;
+  animation: surface-enter 420ms var(--ease-out) both;
+}
+
+.view-enter > :nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.view-enter > :nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.view-enter > :nth-child(4) {
+  animation-delay: 110ms;
+}
+
+.view-enter > :nth-child(5) {
+  animation-delay: 135ms;
+}
+
+.view-enter > :nth-child(n + 6) {
+  animation-delay: 155ms;
+}
+
 .panel {
   border: 1px solid rgba(198, 215, 231, 0.16);
   background: rgba(18, 24, 31, 0.86);
@@ -200,6 +260,10 @@ button {
   border-radius: 8px;
   padding: 14px;
   box-shadow: var(--shadow);
+  transition:
+    border-color var(--motion-base) ease,
+    background-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease;
 }
 
 .panel.tight {
@@ -301,6 +365,14 @@ button {
   justify-content: center;
   gap: 5px;
   overflow: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform var(--motion-fast) var(--ease-spring),
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
 }
 
 .btn.small {
@@ -331,6 +403,16 @@ button {
 .btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:focus-visible,
+.nav-btn:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }
 
 .section-title {
@@ -396,6 +478,10 @@ button {
   background: var(--panel);
   display: grid;
   gap: 6px;
+  transition:
+    transform var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) ease,
+    background-color var(--motion-base) ease;
 }
 
 .news-card strong {
@@ -498,6 +584,18 @@ button {
   background: #25303a;
   color: var(--soft);
   white-space: nowrap;
+  gap: 6px;
+}
+
+.badge.ok::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 0 rgba(60, 207, 126, 0.45);
+  animation: status-pulse 2.4s ease-out infinite;
 }
 
 .badge.ok {
@@ -532,6 +630,10 @@ button {
   background: var(--panel);
   display: grid;
   gap: 12px;
+  transition:
+    transform var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease;
 }
 
 .price {
@@ -672,16 +774,22 @@ button {
 
 .toast {
   position: fixed;
-  left: 14px;
-  right: 14px;
+  left: 50%;
   bottom: calc(env(safe-area-inset-bottom) + 74px);
   z-index: 30;
+  width: min(520px, calc(100% - 28px));
   border-radius: 8px;
   padding: 12px 14px;
   background: #24303a;
   border: 1px solid #34424e;
   box-shadow: var(--shadow);
   color: var(--text);
+  transform: translateX(-50%);
+  animation: toast-in 260ms var(--ease-out) both;
+}
+
+.toast.toast-leave {
+  animation: toast-out 180ms ease-in both;
 }
 
 .bottom-nav {
@@ -713,19 +821,27 @@ button {
 }
 
 .nav-btn {
-  min-height: 42px;
+  min-height: 46px;
   border-radius: 0;
   color: var(--muted);
   background: transparent;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  gap: 2px;
+  font-size: 10px;
   font-weight: 800;
   line-height: 1.15;
   padding: 0 3px;
   cursor: pointer;
   position: relative;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    transform var(--motion-fast) var(--ease-spring);
 }
 
 .nav-btn + .nav-btn {
@@ -741,6 +857,10 @@ button {
   border-radius: 999px;
   background: var(--teal);
   opacity: 0;
+  transform: scaleX(0.35);
+  transition:
+    opacity var(--motion-fast) ease,
+    transform var(--motion-base) var(--ease-out);
 }
 
 .nav-btn.active {
@@ -750,6 +870,149 @@ button {
 
 .nav-btn.active::before {
   opacity: 1;
+  transform: scaleX(1);
+}
+
+.nav-icon {
+  display: block;
+  font-size: 14px;
+  line-height: 1;
+  transform: translateY(0) scale(1);
+  filter: grayscale(0.25);
+  transition:
+    transform var(--motion-base) var(--ease-spring),
+    filter var(--motion-fast) ease;
+}
+
+.nav-label {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-btn.active .nav-icon {
+  transform: translateY(-1px) scale(1.08);
+  filter: grayscale(0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: #476070;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+  }
+
+  .btn.primary:hover:not(:disabled) {
+    background: #0f7780;
+    border-color: #22a5af;
+  }
+
+  .news-card:hover,
+  .plan-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(34, 193, 200, 0.34);
+  }
+
+  .nav-btn:hover {
+    color: var(--soft);
+    background: rgba(255, 255, 255, 0.025);
+  }
+}
+
+@keyframes surface-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes loading-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-5px) scale(1.02);
+  }
+}
+
+@keyframes loading-fade {
+  from {
+    opacity: 0.55;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes busy-slide {
+  from {
+    transform: translateX(-120%);
+  }
+
+  to {
+    transform: translateX(260%);
+  }
+}
+
+@keyframes status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(60, 207, 126, 0.45);
+  }
+
+  65%,
+  100% {
+    box-shadow: 0 0 0 7px rgba(60, 207, 126, 0);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media (min-width: 620px) {

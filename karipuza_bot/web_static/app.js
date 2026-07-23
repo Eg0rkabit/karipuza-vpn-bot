@@ -23,6 +23,8 @@ const state = {
   toast: "",
 };
 
+let animateNextView = true;
+
 const NEWS = [
   {
     title: "🚀 Mini App обновлён",
@@ -162,14 +164,67 @@ function userDisplayName() {
   return user?.firstName || user?.username || "личный кабинет";
 }
 
+function impactHaptic(style = "light") {
+  try {
+    tg?.HapticFeedback?.impactOccurred(style);
+  } catch {
+    // Haptics are optional and unavailable outside Telegram.
+  }
+}
+
+function selectionHaptic() {
+  try {
+    tg?.HapticFeedback?.selectionChanged();
+  } catch {
+    // Haptics are optional and unavailable outside Telegram.
+  }
+}
+
+function notificationHaptic(type) {
+  try {
+    tg?.HapticFeedback?.notificationOccurred(type);
+  } catch {
+    // Haptics are optional and unavailable outside Telegram.
+  }
+}
+
+function syncToast() {
+  const current = app.querySelector(".toast");
+  if (!state.toast) {
+    current?.remove();
+    return;
+  }
+  if (current) {
+    current.classList.remove("toast-leave");
+    current.textContent = state.toast;
+    return;
+  }
+
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.setAttribute("role", "status");
+  toast.setAttribute("aria-live", "polite");
+  toast.textContent = state.toast;
+  app.append(toast);
+}
+
 function setToast(text) {
   state.toast = text;
-  render();
+  syncToast();
   window.clearTimeout(setToast.timer);
+  window.clearTimeout(setToast.removeTimer);
   setToast.timer = window.setTimeout(() => {
     state.toast = "";
-    render();
+    const toast = app.querySelector(".toast");
+    if (!toast) return;
+    toast.classList.add("toast-leave");
+    setToast.removeTimer = window.setTimeout(() => toast.remove(), 180);
   }, 2600);
+}
+
+function scrollViewToTop() {
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
 }
 
 async function loadBase() {
@@ -231,21 +286,28 @@ function header() {
 function nav() {
   const isAdmin = Boolean(state.me?.user?.isAdmin);
   const tabs = [
-    ["home", "🏠 Главная"],
-    ["plans", "💳 Тарифы"],
-    ["subscription", "🔑 Подписка"],
-    ["support", "💬 Помощь"],
-    ["profile", "👤 Профиль"],
+    ["home", "🏠", "Главная"],
+    ["plans", "💳", "Тарифы"],
+    ["subscription", "🔑", "Подписка"],
+    ["support", "💬", "Помощь"],
+    ["profile", "👤", "Профиль"],
   ];
-  if (isAdmin) tabs.push(["admin", "🛠 Админ"]);
+  if (isAdmin) tabs.push(["admin", "🛠", "Админ"]);
   return `
     <nav class="bottom-nav ${isAdmin ? "admin" : ""}">
       <div class="bottom-nav-inner">
         ${tabs
           .map(
-            ([id, label]) => `
-              <button class="nav-btn ${state.tab === id ? "active" : ""}" data-tab="${id}">
-                ${label}
+            ([id, icon, label]) => `
+              <button
+                class="nav-btn ${state.tab === id ? "active" : ""}"
+                data-tab="${id}"
+                type="button"
+                aria-label="${label}"
+                ${state.tab === id ? 'aria-current="page"' : ""}
+              >
+                <span class="nav-icon" aria-hidden="true">${icon}</span>
+                <span class="nav-label">${label}</span>
               </button>
             `,
           )
@@ -684,16 +746,27 @@ function currentView() {
 }
 
 function render() {
+  app.setAttribute("aria-busy", String(state.busy));
   app.innerHTML = `
+    ${state.busy ? '<div class="busy-bar" role="progressbar" aria-label="Загрузка"></div>' : ""}
     ${state.me ? header() : ""}
     ${currentView()}
     ${state.me ? nav() : ""}
-    ${state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : ""}
   `;
+  syncToast();
+
+  if (animateNextView) {
+    const view = app.querySelector(".view");
+    if (view) {
+      view.classList.add("view-enter");
+      animateNextView = false;
+    }
+  }
 }
 
 async function copyText(text) {
   await navigator.clipboard.writeText(text);
+  notificationHaptic("success");
   setToast("Скопировано");
 }
 
@@ -708,11 +781,17 @@ async function handleClick(event) {
 
   const tab = target.dataset.tab;
   if (tab) {
+    const changed = state.tab !== tab;
+    selectionHaptic();
     state.tab = tab;
+    animateNextView = changed;
     if (tab === "admin") await loadAdmin();
     render();
+    window.requestAnimationFrame(scrollViewToTop);
     return;
   }
+
+  impactHaptic("light");
 
   try {
     if (target.dataset.refresh !== undefined) {
@@ -735,6 +814,7 @@ async function handleClick(event) {
         body: JSON.stringify({ tariffCode: target.dataset.buy }),
       });
       state.activeOrder = result.order;
+      animateNextView = state.tab !== "plans";
       state.tab = "plans";
       await refresh();
       setToast(result.payment ? "Заказ создан, можно оплатить" : result.created ? "Заказ создан" : "Заказ уже был создан");
@@ -821,6 +901,7 @@ async function handleClick(event) {
       setToast("Доступ поставлен на паузу");
     }
   } catch (error) {
+    notificationHaptic("error");
     setToast(error.message);
   }
 }
