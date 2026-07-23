@@ -272,7 +272,7 @@ function header() {
     <header class="topbar">
       <div class="brand">
         <div class="mini-mark" aria-hidden="true">
-          <img class="brand-logo" src="/assets/logo.png?v=20260723-brand1" alt="" />
+          <img class="brand-logo" src="/assets/logo.png?v=20260723-brand2" alt="" />
         </div>
         <div>
           <h1>Karipaza Froxy</h1>
@@ -575,7 +575,7 @@ function profileView() {
       <section class="panel profile-card">
         <div class="profile-head">
           <div class="mini-mark large" aria-hidden="true">
-            <img class="brand-logo" src="/assets/logo.png?v=20260723-brand1" alt="" />
+            <img class="brand-logo" src="/assets/logo.png?v=20260723-brand2" alt="" />
           </div>
           <div>
             <p class="eyebrow">👤 Профиль</p>
@@ -732,7 +732,7 @@ function adminView() {
 
 function currentView() {
   if (!state.me) {
-    return `<div class="loading"><img class="loading-logo" src="/assets/logo.png?v=20260723-brand1" alt="" /><p>Загрузка</p></div>`;
+    return `<div class="loading"><img class="loading-logo" src="/assets/logo.png?v=20260723-brand2" alt="" /><p>Загрузка</p></div>`;
   }
   const views = {
     home: homeView,
