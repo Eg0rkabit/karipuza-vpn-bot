@@ -112,6 +112,7 @@ journalctl -u karipuza-webapp -f
 cd /opt/karipuza-bot
 git pull
 bash scripts/set-subscription-title.sh "Karipaza Froxy"
+bash scripts/set-host-remark.sh "🇫🇮 Karipaza Finland"
 ```
 
 После этого пользователь обновляет подписку в Happ. Название конкретного сервера,
