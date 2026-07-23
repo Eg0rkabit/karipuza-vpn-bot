@@ -40,7 +40,7 @@ install -d -m 0700 "${backup_dir}"
 [[ -f "${APP_DIR}/.env" ]] && cp -a "${APP_DIR}/.env" "${backup_dir}/"
 [[ -d /etc/nginx ]] && cp -a /etc/nginx "${backup_dir}/nginx"
 
-echo "==> Updating Karipuza code"
+echo "==> Updating Karipaza Froxy code"
 cd "${APP_DIR}"
 git fetch origin "${APP_BRANCH}"
 git checkout -B "${APP_BRANCH}" "origin/${APP_BRANCH}"
@@ -221,7 +221,7 @@ if grep -q '^BOT_TOKEN=' "${APP_DIR}/.env"; then
     curl --silent --show-error --fail \
       "https://api.telegram.org/bot${bot_token}/setChatMenuButton" \
       -H "Content-Type: application/json" \
-      -d "{\"menu_button\":{\"type\":\"web_app\",\"text\":\"Karipuza\",\"web_app\":{\"url\":\"${WEBAPP_URL}\"}}}" \
+      -d "{\"menu_button\":{\"type\":\"web_app\",\"text\":\"Karipaza Froxy\",\"web_app\":{\"url\":\"${WEBAPP_URL}\"}}}" \
       >/dev/null || echo "Could not set Telegram menu button automatically." >&2
   fi
 fi

@@ -61,5 +61,5 @@ if ! systemctl is-active --quiet karipuza-bot.service; then
 fi
 
 echo
-echo "Karipuza bot v2 is running."
+echo "Karipaza Froxy bot v2 is running."
 systemctl status karipuza-bot.service --no-pager

@@ -24,7 +24,7 @@ copy_if_exists() {
   fi
 }
 
-echo "==> Saving Karipuza bot"
+echo "==> Saving Karipaza Froxy bot"
 if [ -d /opt/karipuza-bot ]; then
   mkdir -p "${BACKUP_DIR}/opt/karipuza-bot"
   cp -a \

@@ -322,8 +322,8 @@ def create_router(
         image.save(output, format="PNG")
         await bot.send_photo(
             callback.from_user.id,
-            BufferedInputFile(output.getvalue(), filename="karipuza-subscription.png"),
-            caption="QR-код подписки Karipuza VPN",
+            BufferedInputFile(output.getvalue(), filename="karipaza-froxy-subscription.png"),
+            caption="QR-код подписки Karipaza Froxy",
         )
 
     @router.callback_query(F.data == "instruction")

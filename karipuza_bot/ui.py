@@ -33,14 +33,14 @@ def main_keyboard(is_admin: bool, mini_app_url: str = "") -> InlineKeyboardMarku
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="🚀 Karipuza App",
+                    text="🚀 Karipaza Froxy",
                     web_app=WebAppInfo(url=mini_app_url),
                 )
             ]
         )
     rows.extend(
         [
-            [button("⚡ Подключить VPN", "plans")],
+            [button("⚡ Подключиться", "plans")],
             [
                 button("🔑 Моя подписка", "subscription"),
                 button("👤 Профиль", "profile"),
@@ -62,10 +62,10 @@ def main_keyboard(is_admin: bool, mini_app_url: str = "") -> InlineKeyboardMarku
 def main_text(first_name: str | None = None) -> str:
     greeting = f", {html.escape(first_name)}" if first_name else ""
     return (
-        f"<b>Karipuza VPN — быстрый доступ к свободному интернету</b>\n\n"
-        f"👋 Добро пожаловать в Karipuza VPN{greeting}!\n\n"
-        "Здесь ты можешь быстро подключить удобный VPN для своих устройств. "
-        "Karipuza VPN помогает сохранить приватность, пользоваться интернетом "
+        f"<b>Karipaza Froxy — быстрый доступ к свободному интернету</b>\n\n"
+        f"👋 Добро пожаловать в Karipaza Froxy{greeting}!\n\n"
+        "Здесь ты можешь быстро подключить защищённый доступ для своих устройств. "
+        "Karipaza Froxy помогает сохранить приватность, пользоваться интернетом "
         "стабильнее и подключаться без проблем.\n\n"
         "Наша гордость — твоя безопасность и удобство! 💫"
     )
@@ -88,7 +88,7 @@ def plans_keyboard() -> InlineKeyboardMarkup:
 
 def plans_text() -> str:
     return (
-        "<b>Тарифы Karipuza VPN</b>\n\n"
+        "<b>Тарифы Karipaza Froxy</b>\n\n"
         "Без ограничений по трафику. Подписку можно использовать "
         "на своих устройствах.\n\n"
         "Выберите срок:"
@@ -256,7 +256,7 @@ def profile_text(
         traffic = "0 Б"
 
     return (
-        "<b>Профиль Karipuza</b>\n\n"
+        "<b>Профиль Karipaza Froxy</b>\n\n"
         f"Имя: <b>{html.escape(str(name))}</b>\n"
         f"Username: <b>{html.escape(username_text)}</b>\n"
         f"Telegram ID: <code>{tg_id}</code>\n\n"
@@ -282,7 +282,7 @@ def profile_keyboard(has_subscription: bool) -> InlineKeyboardMarkup:
 
 def instruction_text() -> str:
     return (
-        "<b>Как подключить Karipuza VPN</b>\n\n"
+        "<b>Как подключить Karipaza Froxy</b>\n\n"
         "1. Установите приложение Happ для своего устройства.\n"
         "2. Откройте в боте раздел «Моя подписка».\n"
         "3. Скопируйте ссылку или откройте QR-код.\n"
@@ -492,7 +492,7 @@ def admin_user_text(user) -> str:
         f"Имя: <b>{html.escape(str(user['first_name'] or 'не указано'))}</b>\n"
         f"Username: {html.escape(username)}\n"
         f"Telegram ID: <code>{user['tg_id']}</code>\n"
-        f"VPN-статус: <b>{html.escape(status)}</b>\n"
+        f"Статус доступа: <b>{html.escape(status)}</b>\n"
         f"Подписка до: <b>{format_date(int(user['expire_at']))}</b>\n"
         f"Использовано: <b>{format_size(int(user['traffic_used']))}</b>"
     )

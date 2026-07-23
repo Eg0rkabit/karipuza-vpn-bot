@@ -1,6 +1,7 @@
-# Karipuza VPN Bot
+# Karipaza Froxy
 
-Telegram-бот для продажи и управления VPN-подписками через Remnawave.
+Telegram-бот и Mini App для продажи и управления подписками Karipaza Froxy
+через Remnawave.
 
 ## Возможности
 

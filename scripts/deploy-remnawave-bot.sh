@@ -150,12 +150,12 @@ systemctl restart karipuza-bot
 sleep 4
 
 if ! systemctl is-active --quiet karipuza-bot; then
-  echo "Karipuza bot did not start. Recent logs:" >&2
+  echo "Karipaza Froxy bot did not start. Recent logs:" >&2
   journalctl -u karipuza-bot -n 100 --no-pager >&2
   exit 1
 fi
 
 echo
-echo "Karipuza bot is running with Remnawave."
+echo "Karipaza Froxy bot is running with Remnawave."
 echo "Backup: ${backup_dir}"
 systemctl status karipuza-bot --no-pager

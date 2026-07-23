@@ -43,7 +43,7 @@ class YooKassaClient:
                 "type": "redirect",
                 "return_url": self.settings.yookassa_return_url,
             },
-            "description": f"Karipuza VPN: {title}, заказ #{order_id}"[:128],
+            "description": f"Karipaza Froxy: {title}, заказ #{order_id}"[:128],
             "metadata": {
                 "order_id": str(order_id),
                 "tg_id": str(tg_id),

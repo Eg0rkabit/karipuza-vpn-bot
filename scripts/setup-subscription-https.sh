@@ -189,7 +189,7 @@ set_env_value "$MARZBAN_ENV" "XRAY_SUBSCRIPTION_URL_PREFIX" "$SUBSCRIPTION_URL"
 set_env_value "$MARZBAN_ENV" "XRAY_SUBSCRIPTION_PATH" "sub"
 restart_marzban
 
-echo "==> Configuring Karipuza bot subscription URL"
+echo "==> Configuring Karipaza Froxy bot subscription URL"
 if [ -f "$BOT_ENV" ]; then
   set_env_value "$BOT_ENV" "SUBSCRIPTION_URL_PREFIX" "$SUBSCRIPTION_URL"
   sed -i -E "/^[#[:space:]]*SUBSCRIPTION_CHECK_HOST=/d" "$BOT_ENV"

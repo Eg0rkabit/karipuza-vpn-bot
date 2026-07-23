@@ -125,7 +125,7 @@ function statusDetails(status, isActive = false) {
   }
   return {
     text: "нет подписки",
-    title: "VPN ещё не подключён",
+    title: "Подключение ещё не настроено",
     tone: "muted",
     note: "Выберите тариф, отправьте оплату на проверку, и после подтверждения появится ссылка для Happ.",
   };
@@ -272,10 +272,10 @@ function header() {
     <header class="topbar">
       <div class="brand">
         <div class="mini-mark" aria-hidden="true">
-          <img class="brand-logo" src="/assets/logo.png" alt="" />
+          <img class="brand-logo" src="/assets/logo.png?v=20260723-brand1" alt="" />
         </div>
         <div>
-          <h1>Karipuza VPN</h1>
+          <h1>Karipaza Froxy</h1>
           <p>${escapeHtml(userDisplayName())}</p>
         </div>
       </div>
@@ -322,8 +322,8 @@ function homeIntro() {
   return `
     <section class="panel home-hero">
       <p class="eyebrow">👋 Главная</p>
-      <h2 class="title">Добро пожаловать в Karipuza VPN!</h2>
-      <p class="subtitle">Здесь ты можешь быстро подключить удобный VPN для своих устройств. Karipuza VPN помогает сохранить приватность, пользоваться интернетом стабильнее и подключаться без проблем.</p>
+      <h2 class="title">Добро пожаловать в Karipaza Froxy!</h2>
+      <p class="subtitle">Здесь ты можешь быстро подключить защищённый доступ для своих устройств. Karipaza Froxy помогает сохранить приватность, пользоваться интернетом стабильнее и подключаться без проблем.</p>
       <p class="subtitle">Наша гордость — твоя безопасность и удобство! 💫</p>
       <div class="quick-actions compact-actions">
         <button class="btn primary" data-tab="${sub ? "subscription" : "plans"}">${sub ? "🔑 Подписка" : "💳 Купить"}</button>
@@ -575,7 +575,7 @@ function profileView() {
       <section class="panel profile-card">
         <div class="profile-head">
           <div class="mini-mark large" aria-hidden="true">
-            <img class="brand-logo" src="/assets/logo.png" alt="" />
+            <img class="brand-logo" src="/assets/logo.png?v=20260723-brand1" alt="" />
           </div>
           <div>
             <p class="eyebrow">👤 Профиль</p>
@@ -617,7 +617,7 @@ function adminView() {
         <div class="row-head">
           <div>
             <p class="eyebrow">🛠 Админ-панель</p>
-            <h2 class="title">Управление Karipuza</h2>
+            <h2 class="title">Управление Karipaza Froxy</h2>
           </div>
           <button class="btn ghost small" data-admin-refresh>🔄 Обновить</button>
         </div>
@@ -732,7 +732,7 @@ function adminView() {
 
 function currentView() {
   if (!state.me) {
-    return `<div class="loading"><img class="loading-logo" src="/assets/logo.png" alt="" /><p>Загрузка</p></div>`;
+    return `<div class="loading"><img class="loading-logo" src="/assets/logo.png?v=20260723-brand1" alt="" /><p>Загрузка</p></div>`;
   }
   const views = {
     home: homeView,

@@ -26,3 +26,15 @@ class UiTests(unittest.TestCase):
         text = ui.main_text("<Егор>")
         self.assertIn("&lt;Егор&gt;", text)
         self.assertNotIn("<Егор>", text)
+
+    def test_public_brand_is_karipaza_froxy(self) -> None:
+        text = ui.main_text()
+        buttons = [
+            button.text
+            for row in ui.main_keyboard(False, "https://example.com").inline_keyboard
+            for button in row
+        ]
+
+        self.assertIn("Karipaza Froxy", text)
+        self.assertNotIn("Karipuza VPN", text)
+        self.assertIn("🚀 Karipaza Froxy", buttons)
