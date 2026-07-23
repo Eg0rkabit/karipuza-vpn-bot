@@ -13,7 +13,7 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 import aiohttp
 from aiohttp import web
@@ -513,6 +513,20 @@ def safe_header(value: Any, fallback: str) -> str:
     return text or fallback
 
 
+def subscription_url_for_client(
+    subscription_url: str,
+    client_type: str = "singbox",
+) -> str:
+    parsed = urlsplit(subscription_url)
+    suffix = f"/{client_type}"
+    path = parsed.path.rstrip("/")
+    if not path.endswith(suffix):
+        path = f"{path}{suffix}"
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, path, parsed.query, "")
+    )
+
+
 async def api_mobile_config(request: web.Request) -> web.Response:
     auth, session, _ = await require_mobile_auth(request)
     app_settings: Settings = request.app["settings"]
@@ -528,7 +542,8 @@ async def api_mobile_config(request: web.Request) -> web.Response:
         if subscription
         else str(local_user["subscription_url"] or "")
     )
-    parsed_url = urlsplit(subscription_url)
+    client_subscription_url = subscription_url_for_client(subscription_url)
+    parsed_url = urlsplit(client_subscription_url)
     if parsed_url.scheme != "https" or not parsed_url.hostname:
         LOGGER.error(
             "Rejected mobile subscription URL for %s: %s",
@@ -559,7 +574,7 @@ async def api_mobile_config(request: web.Request) -> web.Response:
     try:
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as client:
             async with client.get(
-                subscription_url,
+                client_subscription_url,
                 allow_redirects=True,
                 max_redirects=3,
             ) as upstream:
@@ -567,12 +582,21 @@ async def api_mobile_config(request: web.Request) -> web.Response:
                     raise RuntimeError(
                         f"subscription returned HTTP {upstream.status}"
                     )
+                content_type = upstream.headers.get(
+                    "Content-Type",
+                    "unknown content type",
+                ).split(";", 1)[0]
                 body = await upstream.content.read(
                     app_settings.mobile_subscription_max_bytes + 1
                 )
         if len(body) > app_settings.mobile_subscription_max_bytes:
             raise RuntimeError("subscription response is too large")
-        config = json.loads(body.decode("utf-8-sig"))
+        try:
+            config = json.loads(body.decode("utf-8-sig"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RuntimeError(
+                f"subscription returned {content_type}, not sing-box JSON"
+            ) from error
         if (
             not isinstance(config, dict)
             or not isinstance(config.get("outbounds"), list)

@@ -7,7 +7,33 @@ from pathlib import Path
 from aiohttp.test_utils import TestClient, TestServer
 
 from karipuza_bot.config import Settings
-from karipuza_bot.webapp import build_app
+from karipuza_bot.webapp import build_app, subscription_url_for_client
+
+
+class SubscriptionUrlTests(unittest.TestCase):
+    def test_appends_explicit_singbox_format(self) -> None:
+        self.assertEqual(
+            subscription_url_for_client(
+                "https://sub.karipuza.ru/secret-token"
+            ),
+            "https://sub.karipuza.ru/secret-token/singbox",
+        )
+
+    def test_preserves_query_and_does_not_duplicate_format(self) -> None:
+        self.assertEqual(
+            subscription_url_for_client(
+                "https://sub.karipuza.ru/secret-token/singbox?foo=bar"
+            ),
+            "https://sub.karipuza.ru/secret-token/singbox?foo=bar",
+        )
+
+    def test_removes_fragment(self) -> None:
+        self.assertEqual(
+            subscription_url_for_client(
+                "https://sub.karipuza.ru/secret-token#unused"
+            ),
+            "https://sub.karipuza.ru/secret-token/singbox",
+        )
 
 
 class MobileApiTests(unittest.IsolatedAsyncioTestCase):
