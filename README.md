@@ -1,7 +1,7 @@
 # Karipaza Froxy
 
-Telegram-бот, Mini App и Android-клиент для управления подписками Karipaza
-Froxy через Remnawave.
+Telegram-бот и Mini App для управления подписками Karipaza Froxy через
+Remnawave. Для подключения используется Happ.
 
 ## Возможности
 
@@ -13,7 +13,6 @@ Froxy через Remnawave.
 - встроенная поддержка с обращениями и ответами администратора;
 - админ-панель с платежами, пользователями и состоянием Remnawave;
 - Telegram Mini App с главной страницей, новостями, тарифами и админскими действиями;
-- Android-приложение с входом через Telegram и системным VPN;
 - защита от частого нажатия кнопок;
 - подробные ошибки отправляются администраторам, пользователю показывается простой текст.
 
@@ -28,7 +27,6 @@ karipuza_bot/handlers.py  сценарии Telegram-бота
 karipuza_bot/ui.py        тексты и клавиатуры
 karipuza_bot/webapp.py    backend Telegram Mini App
 karipuza_bot/web_static/  интерфейс Mini App
-android-app/              нативный Android-клиент
 ```
 
 ## Настройка
@@ -105,27 +103,19 @@ Let's Encrypt, настраивает nginx и добавляет кнопку M
 journalctl -u karipuza-webapp -f
 ```
 
-## Android
+## Название подписки в Happ
 
-Приложение находится в `android-app/`. Оно не содержит API-токен Remnawave и не
-получает открытую ссылку подписки. Пользователь подтверждает новое устройство в
-Telegram, после чего backend выдаёт отдельный отзывной токен и проксирует только
-его личную sing-box-конфигурацию.
-
-APK собирается workflow `Android APK` в GitHub Actions. Первая версия использует
-debug-подпись только для закрытого тестирования; перед публичной раздачей нужен
-постоянный release-ключ.
-
-После успешной сборки мобильный API разворачивается отдельно:
+Верхнее название профиля задаётся настройкой подписки Remnawave. Чтобы заменить
+стандартное `Remnawave` на название сервиса:
 
 ```bash
 cd /opt/karipuza-bot
 git pull
-bash scripts/deploy-mobile-api.sh
+bash scripts/set-subscription-title.sh "Karipaza Froxy"
 ```
 
-Скрипт сохраняет `.env` и базу, обновляет только код бота и Web API, затем
-проверяет оба systemd-сервиса. Remnawave, nginx и VPN-порт `443` он не меняет.
+После этого пользователь обновляет подписку в Happ. Название конкретного сервера,
+например `Karipuza Finland`, остаётся отдельной строкой ниже.
 
 Администратор может отвечать на обращения двумя способами:
 
