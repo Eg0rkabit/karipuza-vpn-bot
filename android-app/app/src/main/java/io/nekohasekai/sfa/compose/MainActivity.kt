@@ -1,6 +1,7 @@
 package io.nekohasekai.sfa.compose
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -70,6 +72,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -79,15 +82,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import io.nekohasekai.sfa.BuildConfig
 import io.nekohasekai.sfa.R
@@ -260,7 +266,10 @@ class MainActivity :
         loading = false
     }
 
-    private fun refreshAccount(updateConfig: Boolean) {
+    private fun refreshAccount(
+        updateConfig: Boolean,
+        connectWhenReady: Boolean = false,
+    ) {
         val token = sessionToken ?: return
         loading = true
         errorMessage = null
@@ -278,6 +287,13 @@ class MainActivity :
                 } else if (subscription?.isActive != true) {
                     configReady = false
                 }
+                if (
+                    connectWhenReady &&
+                    subscription?.isActive == true &&
+                    configReady
+                ) {
+                    requestVpnStart()
+                }
             } catch (error: Exception) {
                 if (error is ApiException && error.statusCode == 401) {
                     clearLocalSession()
@@ -294,11 +310,19 @@ class MainActivity :
             BoxService.stop()
             return
         }
-        if (!configReady || account?.subscription?.isActive != true) {
-            errorMessage = "Сначала нужна активная подписка и свежая конфигурация."
+        if (account?.subscription?.isActive != true) {
+            errorMessage = "Для подключения нужна активная подписка."
             selectedTab = 1
             return
         }
+        if (!configReady) {
+            refreshAccount(updateConfig = true, connectWhenReady = true)
+            return
+        }
+        requestVpnStart()
+    }
+
+    private fun requestVpnStart() {
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -431,6 +455,18 @@ private val KaripazaTypography =
 
 @Composable
 private fun KaripazaTheme(content: @Composable () -> Unit) {
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            window.statusBarColor = Color.Transparent.toArgb()
+            window.navigationBarColor = KaripazaColors.background.toArgb()
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = true
+                isAppearanceLightNavigationBars = true
+            }
+        }
+    }
     MaterialTheme(
         colorScheme = KaripazaColors,
         typography = KaripazaTypography,
@@ -626,27 +662,33 @@ private fun MainScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             ErrorBanner(errorMessage, onDismissError)
-            AnimatedContent(targetState = selectedTab, label = "main-tabs") { tab ->
-                when (tab) {
-                    1 ->
-                        SubscriptionScreen(
-                            account = account,
-                            configReady = configReady,
-                            configUpdatedAt = configUpdatedAt,
-                            loading = loading,
-                            onRefresh = onRefresh,
-                        )
-                    2 -> ProfileScreen(account, onLogout)
-                    else ->
-                        HomeScreen(
-                            account = account,
-                            serviceStatus = serviceStatus,
-                            loading = loading,
-                            configReady = configReady,
-                            onConnect = onConnect,
-                            onRefresh = onRefresh,
-                            onOpenSubscription = { onTabSelected(1) },
-                        )
+            AnimatedContent(
+                targetState = selectedTab,
+                label = "main-tabs",
+                modifier = Modifier.fillMaxWidth(),
+            ) { tab ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    when (tab) {
+                        1 ->
+                            SubscriptionScreen(
+                                account = account,
+                                configReady = configReady,
+                                configUpdatedAt = configUpdatedAt,
+                                loading = loading,
+                                onRefresh = onRefresh,
+                            )
+                        2 -> ProfileScreen(account, onLogout)
+                        else ->
+                            HomeScreen(
+                                account = account,
+                                serviceStatus = serviceStatus,
+                                loading = loading,
+                                configReady = configReady,
+                                onConnect = onConnect,
+                                onRefresh = onRefresh,
+                                onOpenSubscription = { onTabSelected(1) },
+                            )
+                    }
                 }
             }
         }
@@ -661,6 +703,7 @@ private fun AppHeader(account: AccountInfo?) {
             modifier =
             Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             Image(
@@ -755,7 +798,7 @@ private fun HomeScreen(
                 ),
                 modifier = Modifier.size(88.dp),
             ) {
-                if (transitioning) {
+                if (loading || transitioning) {
                     CircularProgressIndicator(
                         color = Color.White,
                         strokeWidth = 3.dp,
@@ -770,7 +813,13 @@ private fun HomeScreen(
                 }
             }
             Spacer(Modifier.height(10.dp))
-            Text(if (connected) "Отключить" else "Подключить")
+            Text(
+                when {
+                    loading -> "Обновляем"
+                    connected -> "Отключить"
+                    else -> "Подключить"
+                },
+            )
         }
     }
     Spacer(Modifier.height(12.dp))
