@@ -13,9 +13,7 @@ from karipuza_bot.webapp import build_app, subscription_url_for_client
 class SubscriptionUrlTests(unittest.TestCase):
     def test_appends_explicit_singbox_format(self) -> None:
         self.assertEqual(
-            subscription_url_for_client(
-                "https://sub.karipuza.ru/secret-token"
-            ),
+            subscription_url_for_client("https://sub.karipuza.ru/secret-token"),
             "https://sub.karipuza.ru/secret-token/singbox",
         )
 
@@ -29,9 +27,7 @@ class SubscriptionUrlTests(unittest.TestCase):
 
     def test_removes_fragment(self) -> None:
         self.assertEqual(
-            subscription_url_for_client(
-                "https://sub.karipuza.ru/secret-token#unused"
-            ),
+            subscription_url_for_client("https://sub.karipuza.ru/secret-token#unused"),
             "https://sub.karipuza.ru/secret-token/singbox",
         )
 
@@ -148,19 +144,21 @@ class MobileApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_public_legal_pages_are_available_without_auth(self) -> None:
         expected = {
             "/documents": (
-                "Документы и тарифы",
-                "299 ₽",
-                "2799 ₽",
+                "Соглашения и тарифы",
+                "229 ₽",
+                "1979 ₽",
+                "до 5 личных устройств",
             ),
             "/privacy": (
                 "Политика конфиденциальности",
-                "тикет-система",
+                "Написать в поддержку",
                 "Platega",
+                "HWID",
             ),
             "/terms": (
                 "Пользовательское соглашение",
                 "Отказ от услуги и возврат",
-                "фактических расходов",
+                "до 5 личных устройств",
             ),
         }
 
@@ -175,5 +173,9 @@ class MobileApiTests(unittest.IsolatedAsyncioTestCase):
                 )
                 body = await response.text()
                 self.assertIn("Karipaza Froxy", body)
+                self.assertIn(
+                    "https://t.me/karipaza_test_bot?start=support",
+                    body,
+                )
                 for snippet in snippets:
                     self.assertIn(snippet, body)

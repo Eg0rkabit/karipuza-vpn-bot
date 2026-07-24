@@ -641,12 +641,31 @@ button {
   font-size: 27px;
   font-weight: 900;
   line-height: 1;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.price del {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .price small {
+  flex-basis: 100%;
   font-size: 13px;
   color: var(--muted);
   font-weight: 600;
+}
+
+.plan-perks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  color: var(--soft);
+  font-size: 13px;
 }
 
 .payment-box {

@@ -60,7 +60,7 @@ def main_keyboard(
         ]
     )
     if privacy_url or terms_url:
-        rows.append([button("📚 Документы", "documents")])
+        rows.append([button("📚 Соглашения", "documents")])
     if is_admin:
         rows.append([button("🛠 Админ-панель", "admin:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -71,7 +71,6 @@ def main_text(first_name: str | None = None) -> str:
     return (
         f"<b>Karipaza Froxy — защищённое подключение для ваших устройств</b>\n\n"
         f"👋 Добро пожаловать в Karipaza Froxy{greeting}!\n\n"
-        "Здесь ты можешь быстро подключить защищённый доступ для своих устройств. "
         "Karipaza Froxy помогает сохранить приватность, пользоваться интернетом "
         "стабильнее и подключаться без проблем.\n\n"
         "Наша гордость — твоя безопасность и удобство! 💫"
@@ -84,7 +83,7 @@ def plans_keyboard() -> InlineKeyboardMarkup:
         rows.append(
             [
                 button(
-                    f"{tariff.title} · {tariff.price_rub} ₽",
+                    f"{tariff.title} · {tariff.price_rub} ₽ · −{tariff.discount_percent}%",
                     f"plan:{tariff.code}",
                 )
             ]
@@ -96,8 +95,8 @@ def plans_keyboard() -> InlineKeyboardMarkup:
 def plans_text() -> str:
     return (
         "<b>Тарифы Karipaza Froxy</b>\n\n"
-        "Без ограничений по трафику. Подписку можно использовать "
-        "на своих устройствах.\n\n"
+        "Без ограничений по трафику и до 5 личных устройств "
+        "на одну подписку.\n\n"
         "Выберите срок:"
     )
 
@@ -106,10 +105,13 @@ def plan_text(tariff: Tariff) -> str:
     daily = tariff.price_rub / tariff.days
     return (
         f"<b>{html.escape(tariff.title)}</b>\n\n"
-        f"Стоимость: <b>{tariff.price_rub} ₽</b>\n"
+        f"Новая цена: <b>{tariff.price_rub} ₽</b> "
+        f"<s>{tariff.previous_price_rub} ₽</s>\n"
+        f"Скидка: <b>{tariff.discount_percent}%</b>\n"
         f"Срок: <b>{tariff.days} дней</b>\n"
         f"В день: <b>около {daily:.0f} ₽</b>\n"
-        "Трафик: <b>без ограничений</b>\n\n"
+        "Трафик: <b>без ограничений</b>\n"
+        "Устройства: <b>до 5</b>\n\n"
         "После оплаты администратор проверит платёж, "
         "и бот автоматически выдаст подписку.\n\n"
         "Нажимая «Принять и оформить», вы подтверждаете, что ознакомились "
@@ -124,9 +126,7 @@ def plan_keyboard(
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if privacy_url or terms_url:
-        rows.append(
-            [button("📚 Политика и соглашение", f"documents:plan:{tariff.code}")]
-        )
+        rows.append([button("📚 Соглашения", f"documents:plan:{tariff.code}")])
     rows.extend(
         [
             [button("✅ Принять и оформить", f"order:create:{tariff.code}")],
@@ -139,8 +139,7 @@ def plan_keyboard(
 
 def documents_text() -> str:
     return (
-        "<b>Документы Karipaza Froxy</b>\n\n"
-        "Выберите документ, который хотите открыть:"
+        "<b>Соглашения Karipaza Froxy</b>\n\nВыберите документ, который хотите открыть:"
     )
 
 
@@ -240,6 +239,7 @@ def subscription_text(subscription: Subscription | None, local_user=None) -> str
             f"Активна до: <b>{format_date(subscription.expire_at)}</b>\n"
             f"Осталось: <b>{days_left(subscription.expire_at)} дн.</b>\n"
             f"Использовано: <b>{format_size(subscription.traffic_used)}</b>\n\n"
+            "Можно подключить: <b>до 5 личных устройств</b>\n\n"
             f"{note}"
         )
 
@@ -341,7 +341,8 @@ def instruction_text() -> str:
         "2. Откройте в боте раздел «Моя подписка».\n"
         "3. Скопируйте ссылку или откройте QR-код.\n"
         "4. Добавьте подписку в Happ и нажмите кнопку подключения.\n\n"
-        "Подписка добавляется один раз. Новые серверы и изменения "
+        "Одну подписку можно добавить максимум на 5 личных устройств. "
+        "Новые серверы и изменения "
         "появятся после обычного обновления профиля."
     )
 

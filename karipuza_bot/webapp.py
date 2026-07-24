@@ -61,6 +61,7 @@ def subscription_to_dict(subscription: Subscription | None) -> dict[str, Any] | 
         "daysLeft": days_left(subscription.expire_at),
         "trafficUsed": subscription.traffic_used,
         "trafficLimit": subscription.traffic_limit,
+        "deviceLimit": subscription.device_limit,
         "isActive": subscription.is_active,
     }
 
@@ -78,6 +79,7 @@ def local_subscription_to_dict(user: Any | None) -> dict[str, Any] | None:
         "daysLeft": days_left(expire_at),
         "trafficUsed": int(user["traffic_used"] or 0),
         "trafficLimit": 0,
+        "deviceLimit": 0,
         "isActive": user["vpn_status"] == "ACTIVE" and expire_at > int(time.time()),
         "cached": True,
     }
@@ -87,9 +89,8 @@ def mobile_subscription_to_dict(
     subscription: Subscription | None,
     local_user: Any | None,
 ) -> dict[str, Any] | None:
-    payload = (
-        subscription_to_dict(subscription)
-        or local_subscription_to_dict(local_user)
+    payload = subscription_to_dict(subscription) or local_subscription_to_dict(
+        local_user
     )
     if payload:
         payload.pop("subscriptionUrl", None)
@@ -445,13 +446,9 @@ async def api_mobile_auth_complete(request: web.Request) -> web.Response:
         session_expires_at=session_expires_at,
     )
     if status == "PENDING":
-        return no_store(
-            web.json_response({"status": "pending"}, status=202)
-        )
+        return no_store(web.json_response({"status": "pending"}, status=202))
     if status in {"EXPIRED", "NOT_FOUND"}:
-        return no_store(
-            web.json_response({"status": "expired"}, status=410)
-        )
+        return no_store(web.json_response({"status": "expired"}, status=410))
     if status != "AUTHORIZED":
         raise web.HTTPUnauthorized(text="Invalid login request")
 
@@ -495,6 +492,7 @@ async def require_mobile_auth(
 
 async def api_mobile_me(request: web.Request) -> web.Response:
     auth, session, _ = await require_mobile_auth(request)
+    app_settings: Settings = request.app["settings"]
     subscription, local_user, sync_error = await sync_subscription(request, auth)
     response = web.json_response(
         {
@@ -519,10 +517,14 @@ async def api_mobile_me(request: web.Request) -> web.Response:
                     "title": tariff.title,
                     "days": tariff.days,
                     "priceRub": tariff.price_rub,
+                    "previousPriceRub": tariff.previous_price_rub,
+                    "discountPercent": tariff.discount_percent,
                     "badge": tariff.badge,
+                    "deviceLimit": app_settings.subscription_device_limit,
                 }
                 for tariff in TARIFFS
             ],
+            "deviceLimit": app_settings.subscription_device_limit,
             "payment": {
                 "enabled": False,
                 "provider": None,
@@ -547,9 +549,7 @@ def subscription_url_for_client(
     path = parsed.path.rstrip("/")
     if not path.endswith(suffix):
         path = f"{path}{suffix}"
-    return urlunsplit(
-        (parsed.scheme, parsed.netloc, path, parsed.query, "")
-    )
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ""))
 
 
 async def api_mobile_config(request: web.Request) -> web.Response:
@@ -577,8 +577,7 @@ async def api_mobile_config(request: web.Request) -> web.Response:
         )
         raise web.HTTPBadGateway(text="Subscription configuration is unavailable")
     allowed_hosts = {
-        host.lower()
-        for host in app_settings.mobile_subscription_allowed_hosts
+        host.lower() for host in app_settings.mobile_subscription_allowed_hosts
     }
     if parsed_url.hostname.lower() not in allowed_hosts:
         LOGGER.error(
@@ -604,9 +603,7 @@ async def api_mobile_config(request: web.Request) -> web.Response:
                 max_redirects=3,
             ) as upstream:
                 if upstream.status != 200:
-                    raise RuntimeError(
-                        f"subscription returned HTTP {upstream.status}"
-                    )
+                    raise RuntimeError(f"subscription returned HTTP {upstream.status}")
                 content_type = upstream.headers.get(
                     "Content-Type",
                     "unknown content type",
@@ -677,6 +674,7 @@ async def api_me(request: web.Request) -> web.Response:
             "orders": orders,
             "tickets": tickets,
             "syncError": sync_error,
+            "deviceLimit": request.app["settings"].subscription_device_limit,
             "paymentDetails": request.app["settings"].payment_details,
             "payment": {
                 "provider": "yookassa"
@@ -691,6 +689,7 @@ async def api_me(request: web.Request) -> web.Response:
 
 async def api_plans(request: web.Request) -> web.Response:
     await require_auth(request)
+    device_limit = request.app["settings"].subscription_device_limit
     return web.json_response(
         {
             "plans": [
@@ -699,7 +698,10 @@ async def api_plans(request: web.Request) -> web.Response:
                     "title": tariff.title,
                     "days": tariff.days,
                     "priceRub": tariff.price_rub,
+                    "previousPriceRub": tariff.previous_price_rub,
+                    "discountPercent": tariff.discount_percent,
                     "badge": tariff.badge,
+                    "deviceLimit": device_limit,
                 }
                 for tariff in TARIFFS
             ]
@@ -716,6 +718,24 @@ async def api_create_order(request: web.Request) -> web.Response:
 
     db: Database = request.app["db"]
     order = await db.find_waiting_order(auth.tg_id, tariff.code)
+    if order and (
+        int(order["amount_rub"]) != tariff.price_rub
+        or int(order["duration_days"]) != tariff.days
+        or str(order["title"]) != tariff.title
+    ):
+        stale_order_id = int(order["id"])
+        await db.transition_order_status(
+            stale_order_id,
+            expected_status="WAITING_PAYMENT",
+            new_status="CANCELED",
+        )
+        await db.audit(
+            "WEBAPP_STALE_ORDER_CANCELED",
+            actor_tg_id=auth.tg_id,
+            entity_type="order",
+            entity_id=stale_order_id,
+        )
+        order = None
     if order:
         created = False
     else:

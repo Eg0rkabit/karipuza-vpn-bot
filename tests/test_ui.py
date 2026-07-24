@@ -46,19 +46,13 @@ class UiTests(unittest.TestCase):
             "https://app.example/privacy",
             "https://app.example/terms",
         )
-        buttons = [
-            button
-            for row in keyboard.inline_keyboard
-            for button in row
-        ]
+        buttons = [button for row in keyboard.inline_keyboard for button in row]
 
         document_buttons = [
-            button
-            for button in buttons
-            if button.callback_data == "documents"
+            button for button in buttons if button.callback_data == "documents"
         ]
         self.assertEqual(len(document_buttons), 1)
-        self.assertEqual(document_buttons[0].text, "📚 Документы")
+        self.assertEqual(document_buttons[0].text, "📚 Соглашения")
         self.assertFalse(any(button.url for button in document_buttons))
 
     def test_documents_menu_contains_both_legal_pages(self) -> None:
@@ -66,11 +60,7 @@ class UiTests(unittest.TestCase):
             "https://app.example/privacy",
             "https://app.example/terms",
         )
-        buttons = [
-            button
-            for row in keyboard.inline_keyboard
-            for button in row
-        ]
+        buttons = [button for row in keyboard.inline_keyboard for button in row]
 
         self.assertTrue(
             any(
@@ -92,6 +82,22 @@ class UiTests(unittest.TestCase):
 
         self.assertNotIn("свободному интернету", text.lower())
         self.assertIn("защищённое подключение", text.lower())
+        self.assertNotIn(
+            "здесь ты можешь быстро подключить защищённый доступ",
+            text.lower(),
+        )
+
+    def test_tariffs_use_new_discounted_prices(self) -> None:
+        self.assertEqual(
+            [(tariff.code, tariff.price_rub) for tariff in ui.TARIFFS],
+            [
+                ("month_1", 229),
+                ("month_3", 549),
+                ("year_1", 1979),
+            ],
+        )
+        self.assertNotIn("6 месяцев", ui.plans_text())
+        self.assertIn("до 5", ui.plans_text().lower())
 
     def test_plan_requires_acceptance_and_links_documents(self) -> None:
         tariff = ui.TARIFFS[0]
@@ -100,11 +106,7 @@ class UiTests(unittest.TestCase):
             "https://app.example/privacy",
             "https://app.example/terms",
         )
-        buttons = [
-            button
-            for row in keyboard.inline_keyboard
-            for button in row
-        ]
+        buttons = [button for row in keyboard.inline_keyboard for button in row]
 
         self.assertIn("ознакомились", ui.plan_text(tariff))
         self.assertTrue(
@@ -112,11 +114,13 @@ class UiTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                button.text == "📚 Политика и соглашение"
+                button.text == "📚 Соглашения"
                 and button.callback_data == "documents:plan:month_1"
                 for button in buttons
             )
         )
+        self.assertIn("<s>299 ₽</s>", ui.plan_text(tariff))
+        self.assertIn("Устройства: <b>до 5</b>", ui.plan_text(tariff))
 
     def test_user_profile_does_not_show_telegram_id(self) -> None:
         text = ui.profile_text("Егор", "egor", None)

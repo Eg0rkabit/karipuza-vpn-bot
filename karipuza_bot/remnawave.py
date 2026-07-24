@@ -22,6 +22,7 @@ class Subscription:
     expire_at: int
     traffic_used: int
     traffic_limit: int
+    device_limit: int
 
     @property
     def is_active(self) -> bool:
@@ -35,6 +36,7 @@ class RemnawaveClient:
         self.base_url = settings.remnawave_url
         self.api_token = settings.remnawave_api_token
         self.squad_uuids = settings.remnawave_squad_uuids
+        self.device_limit = settings.subscription_device_limit
 
     @property
     def configured(self) -> bool:
@@ -93,6 +95,7 @@ class RemnawaveClient:
             expire_at=cls._timestamp(payload.get("expireAt")),
             traffic_used=int(traffic.get("usedTrafficBytes") or 0),
             traffic_limit=int(payload.get("trafficLimitBytes") or 0),
+            device_limit=int(payload.get("hwidDeviceLimit") or 0),
         )
 
     async def health(self) -> bool:
@@ -123,6 +126,41 @@ class RemnawaveClient:
         if not result:
             return None
         return self._subscription(result["response"])
+
+    async def ensure_device_limit_enabled(self) -> bool:
+        if not self.configured or self.device_limit < 1:
+            return False
+
+        result = await self._request("GET", "/api/subscription-settings")
+        current = (result or {}).get("response") or {}
+        settings_uuid = str(current.get("uuid") or "")
+        if not settings_uuid:
+            raise RemnawaveError("Remnawave не вернул UUID настроек подписки")
+
+        hwid = current.get("hwidSettings") or {}
+        if (
+            hwid.get("enabled") is True
+            and int(hwid.get("fallbackDeviceLimit") or 0) == self.device_limit
+        ):
+            return False
+
+        announce = hwid.get("maxDevicesAnnounce") or (
+            f"К одной подписке можно подключить до {self.device_limit} устройств. "
+            "Чтобы удалить старое устройство, обратитесь в поддержку."
+        )
+        await self._request(
+            "PATCH",
+            "/api/subscription-settings",
+            json={
+                "uuid": settings_uuid,
+                "hwidSettings": {
+                    "enabled": True,
+                    "fallbackDeviceLimit": self.device_limit,
+                    "maxDevicesAnnounce": announce,
+                },
+            },
+        )
+        return True
 
     async def activate(
         self,
@@ -156,6 +194,7 @@ class RemnawaveClient:
                     "activeInternalSquads": list(self.squad_uuids),
                     "telegramId": tg_id,
                     "description": display_name[:200],
+                    "hwidDeviceLimit": self.device_limit,
                 },
             )
         else:
@@ -171,6 +210,7 @@ class RemnawaveClient:
                     "telegramId": tg_id,
                     "description": display_name[:200],
                     "activeInternalSquads": list(self.squad_uuids),
+                    "hwidDeviceLimit": self.device_limit,
                 },
             )
 

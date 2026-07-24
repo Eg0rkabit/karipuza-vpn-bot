@@ -27,14 +27,25 @@ class Tariff:
     title: str
     days: int
     price_rub: int
-    badge: str
+    previous_price_rub: int
+
+    @property
+    def discount_percent(self) -> int:
+        if self.previous_price_rub <= self.price_rub:
+            return 0
+        return round(
+            (self.previous_price_rub - self.price_rub) * 100 / self.previous_price_rub
+        )
+
+    @property
+    def badge(self) -> str:
+        return f"Скидка {self.discount_percent}%"
 
 
 TARIFFS: tuple[Tariff, ...] = (
-    Tariff("month_1", "1 месяц", 30, 299, "Старт"),
-    Tariff("month_3", "3 месяца", 90, 799, "Выгодно"),
-    Tariff("month_6", "6 месяцев", 180, 1499, "Популярный"),
-    Tariff("year_1", "1 год", 365, 2799, "Максимум"),
+    Tariff("month_1", "1 месяц", 30, 229, 299),
+    Tariff("month_3", "3 месяца", 90, 549, 799),
+    Tariff("year_1", "1 год", 365, 1979, 2799),
 )
 
 TARIFFS_BY_CODE = {tariff.code: tariff for tariff in TARIFFS}
@@ -68,6 +79,7 @@ class Settings:
 
     action_cooldown_seconds: float
     heavy_action_cooldown_seconds: float
+    subscription_device_limit: int = 5
     legal_support_contact: str = ""
     legal_effective_date: str = "24.07.2026"
 
@@ -139,10 +151,9 @@ settings = Settings(
     heavy_action_cooldown_seconds=float(
         os.getenv("HEAVY_ACTION_COOLDOWN_SECONDS", "3")
     ),
+    subscription_device_limit=int(os.getenv("SUBSCRIPTION_DEVICE_LIMIT", "5")),
     legal_support_contact=os.getenv("LEGAL_SUPPORT_CONTACT", "").strip(),
-    legal_effective_date=os.getenv(
-        "LEGAL_EFFECTIVE_DATE", "24.07.2026"
-    ).strip(),
+    legal_effective_date=os.getenv("LEGAL_EFFECTIVE_DATE", "24.07.2026").strip(),
 )
 
 
@@ -152,5 +163,7 @@ def validate_settings() -> None:
         missing.append("BOT_TOKEN")
     if not settings.admin_ids:
         missing.append("ADMIN_IDS")
+    if settings.subscription_device_limit < 1:
+        raise RuntimeError("SUBSCRIPTION_DEVICE_LIMIT должен быть не меньше 1")
     if missing:
         raise RuntimeError("Не заполнены переменные в .env: " + ", ".join(missing))

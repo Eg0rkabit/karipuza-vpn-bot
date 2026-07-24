@@ -194,6 +194,14 @@ def create_router(
             )
             return
 
+        if command_payload == "support":
+            await db.clear_session(message.from_user.id)
+            await message.answer(
+                ui.support_text(),
+                reply_markup=ui.support_keyboard(),
+            )
+            return
+
         await db.clear_session(message.from_user.id)
         await message.answer(
             ui.main_text(message.from_user.first_name),
@@ -333,6 +341,24 @@ def create_router(
             await callback.answer("Тариф не найден.", show_alert=True)
             return
         order = await db.find_waiting_order(callback.from_user.id, tariff.code)
+        if order and (
+            int(order["amount_rub"]) != tariff.price_rub
+            or int(order["duration_days"]) != tariff.days
+            or str(order["title"]) != tariff.title
+        ):
+            stale_order_id = int(order["id"])
+            await db.transition_order_status(
+                stale_order_id,
+                expected_status="WAITING_PAYMENT",
+                new_status="CANCELED",
+            )
+            await db.audit(
+                "STALE_ORDER_CANCELED",
+                actor_tg_id=callback.from_user.id,
+                entity_type="order",
+                entity_id=stale_order_id,
+            )
+            order = None
         if order:
             order_id = int(order["id"])
         else:
@@ -438,7 +464,9 @@ def create_router(
         image.save(output, format="PNG")
         await bot.send_photo(
             callback.from_user.id,
-            BufferedInputFile(output.getvalue(), filename="karipaza-froxy-subscription.png"),
+            BufferedInputFile(
+                output.getvalue(), filename="karipaza-froxy-subscription.png"
+            ),
             caption="QR-код подписки Karipaza Froxy",
         )
 

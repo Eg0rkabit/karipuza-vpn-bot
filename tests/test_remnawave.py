@@ -16,6 +16,7 @@ def user_payload(*, expire_at: str = "2026-07-15T12:00:00.000Z") -> dict[str, An
         "subscriptionUrl": "https://sub.example/api/sub/abc",
         "expireAt": expire_at,
         "trafficLimitBytes": 0,
+        "hwidDeviceLimit": 5,
         "createdAt": "2026-06-15T12:00:00.000Z",
         "userTraffic": {"usedTrafficBytes": 1024},
     }
@@ -38,6 +39,17 @@ class FakeRemnawaveClient(RemnawaveClient):
         self.calls.append((method, path, json))
         if path.startswith("/api/users/by-telegram-id/"):
             return {"response": [self.existing] if self.existing else []}
+        if path == "/api/subscription-settings":
+            return {
+                "response": {
+                    "uuid": "33333333-3333-3333-3333-333333333333",
+                    "hwidSettings": {
+                        "enabled": False,
+                        "fallbackDeviceLimit": 1,
+                        "maxDevicesAnnounce": None,
+                    },
+                }
+            }
         return {"response": user_payload()}
 
 
@@ -80,11 +92,13 @@ class RemnawaveClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((method, path), ("POST", "/api/users"))
         self.assertEqual(payload["telegramId"], 100)
         self.assertEqual(payload["trafficLimitStrategy"], "NO_RESET")
+        self.assertEqual(payload["hwidDeviceLimit"], 5)
         self.assertEqual(
             payload["activeInternalSquads"],
             ["22222222-2222-2222-2222-222222222222"],
         )
         self.assertEqual(subscription.traffic_used, 1024)
+        self.assertEqual(subscription.device_limit, 5)
 
     async def test_existing_user_is_updated(self) -> None:
         self.client.existing = user_payload()
@@ -93,3 +107,13 @@ class RemnawaveClientTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual((method, path), ("PATCH", "/api/users"))
         self.assertEqual(payload["uuid"], self.client.existing["uuid"])
+        self.assertEqual(payload["hwidDeviceLimit"], 5)
+
+    async def test_enables_global_hwid_device_limit(self) -> None:
+        changed = await self.client.ensure_device_limit_enabled()
+        method, path, payload = self.client.calls[-1]
+
+        self.assertTrue(changed)
+        self.assertEqual((method, path), ("PATCH", "/api/subscription-settings"))
+        self.assertEqual(payload["hwidSettings"]["fallbackDeviceLimit"], 5)
+        self.assertTrue(payload["hwidSettings"]["enabled"])

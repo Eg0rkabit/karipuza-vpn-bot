@@ -36,12 +36,24 @@ async def run() -> None:
     db = Database(settings.database_path)
     await db.init()
 
+    remnawave = RemnawaveClient(settings)
+    if remnawave.configured:
+        try:
+            changed = await remnawave.ensure_device_limit_enabled()
+            if changed:
+                logging.info(
+                    "Remnawave HWID device limit enabled: %s",
+                    settings.subscription_device_limit,
+                )
+        except Exception:
+            logging.exception("Could not enable Remnawave HWID device limit")
+
     bot = Bot(
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dispatcher = Dispatcher()
-    router = create_router(db, RemnawaveClient(settings), settings)
+    router = create_router(db, remnawave, settings)
     router.callback_query.middleware(CallbackThrottleMiddleware(settings))
     dispatcher.include_router(router)
 

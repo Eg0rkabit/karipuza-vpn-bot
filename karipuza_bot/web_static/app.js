@@ -323,7 +323,7 @@ function homeIntro() {
     <section class="panel home-hero">
       <p class="eyebrow">👋 Главная</p>
       <h2 class="title">Добро пожаловать в Karipaza Froxy!</h2>
-      <p class="subtitle">Здесь ты можешь быстро подключить защищённый доступ для своих устройств. Karipaza Froxy помогает сохранить приватность, пользоваться интернетом стабильнее и подключаться без проблем.</p>
+      <p class="subtitle">Karipaza Froxy помогает сохранить приватность, пользоваться интернетом стабильнее и подключаться без проблем.</p>
       <p class="subtitle">Наша гордость — твоя безопасность и удобство! 💫</p>
       <div class="quick-actions compact-actions">
         <button class="btn primary" data-tab="${sub ? "subscription" : "plans"}">${sub ? "🔑 Подписка" : "💳 Купить"}</button>
@@ -391,6 +391,7 @@ function subscriptionPanel() {
         <div class="metric"><span>📊 Использовано</span><strong>${formatTraffic(sub.trafficUsed)}</strong></div>
         <div class="metric"><span>∞ Трафик</span><strong>${sub.trafficLimit ? formatTraffic(sub.trafficLimit) : "безлимит"}</strong></div>
       </div>
+      <p class="hint">📱 До ${state.me?.deviceLimit || 5} личных устройств на одну подписку.</p>
       <div class="actions compact-actions three">
         <button class="btn primary" data-copy-sub>📋 Скопировать</button>
         <button class="btn" data-tab="plans">💳 Продлить</button>
@@ -405,8 +406,8 @@ function connectionPanel() {
   return `
     <section class="panel">
       <p class="eyebrow">📲 Подключение</p>
-      <h2 class="title">${sub ? "Одна подписка для всех устройств" : "Подключение появится после оплаты"}</h2>
-      <p class="subtitle">Добавьте профиль в Happ на телефоне или компьютере. Когда появятся новые страны, они подтянутся после обновления профиля.</p>
+      <h2 class="title">${sub ? "Одна подписка — до 5 устройств" : "Подключение появится после оплаты"}</h2>
+      <p class="subtitle">Добавьте профиль в Happ максимум на 5 личных устройств. Когда появятся новые страны, они подтянутся после обновления профиля.</p>
       <div class="steps">
         <div class="step"><div class="step-num">1</div><div>Установите Happ для своего устройства.</div></div>
         <div class="step"><div class="step-num">2</div><div>Нажмите «Скопировать» в блоке подписки выше.</div></div>
@@ -433,6 +434,7 @@ function subscriptionView() {
 
 function planCard(plan) {
   const daily = Math.max(1, Math.round(plan.priceRub / plan.days));
+  const deviceLimit = plan.deviceLimit || state.me?.deviceLimit || 5;
   return `
     <article class="plan-card">
       <div class="row-head">
@@ -442,7 +444,15 @@ function planCard(plan) {
         </div>
         <span class="badge">${plan.days} дн.</span>
       </div>
-      <div class="price">${money(plan.priceRub)} <small>около ${money(daily)} в день</small></div>
+      <div class="price">
+        <span>${money(plan.priceRub)}</span>
+        <del>${money(plan.previousPriceRub)}</del>
+        <small>около ${money(daily)} в день</small>
+      </div>
+      <div class="plan-perks">
+        <span>∞ Безлимитный трафик</span>
+        <span>📱 До ${deviceLimit} устройств</span>
+      </div>
       <button class="btn primary" data-buy="${plan.code}">✅ Принять и оформить</button>
     </article>
   `;
@@ -510,6 +520,7 @@ function plansView() {
       <section class="panel tight">
         <p class="eyebrow">💳 Тарифы</p>
         <h2 class="title">Выберите срок доступа</h2>
+        <p class="subtitle">Во все тарифы входят безлимитный трафик и подключение до ${state.me?.deviceLimit || 5} личных устройств.</p>
         <p class="subtitle">${
           state.me?.payment?.yookassaReady
             ? "После онлайн-оплаты подписка активируется автоматически. Mini App покажет ссылку для подключения."
@@ -536,7 +547,7 @@ function supportView() {
       <section class="panel">
         <p class="eyebrow">💬 Поддержка</p>
         <h2 class="title">Напишите, что случилось</h2>
-        <p class="subtitle">Это официальная тикет-система поддержки. Сразу укажите устройство, сеть и текст ошибки. Ответ придёт в Telegram.</p>
+        <p class="subtitle">Опишите проблему и укажите устройство, тип сети и текст ошибки. Поддержка ответит вам в Telegram.</p>
         <div class="field">
           <label for="supportText">Сообщение</label>
           <textarea id="supportText" placeholder="Например: на Wi-Fi не подключается, Happ пишет timeout"></textarea>
@@ -602,15 +613,15 @@ function profileView() {
       </section>
       <section class="panel tight">
         <p class="eyebrow">🧭 Полезно</p>
-        <h2 class="title">Одна ссылка, несколько устройств</h2>
-        <p class="subtitle">Добавьте подписку в Happ один раз. Новые серверы и изменения будут появляться после обновления профиля.</p>
+        <h2 class="title">Одна ссылка — до ${state.me?.deviceLimit || 5} устройств</h2>
+        <p class="subtitle">Добавьте подписку в Happ на своих устройствах. Новые серверы и изменения будут появляться после обновления профиля.</p>
       </section>
       <section class="panel tight">
-        <p class="eyebrow">📚 Документы</p>
-        <h2 class="title">Условия сервиса</h2>
+        <p class="eyebrow">📚 Соглашения</p>
+        <h2 class="title">Условия и правила сервиса</h2>
         <p class="subtitle">Тарифы, правила обработки данных и условия использования всегда доступны здесь.</p>
         <div class="actions compact-actions document-actions">
-          <button class="btn ghost" data-link="/documents">📚 Политика и соглашение</button>
+          <button class="btn ghost" data-link="/documents">📚 Открыть соглашения</button>
         </div>
       </section>
     </main>
