@@ -36,7 +36,7 @@ const NEWS = [
   },
   {
     title: "💳 Онлайн-оплата готовится",
-    text: "Готовим ЮKassa. Пока платежи проходят через ручную проверку админом.",
+    text: "Подключаем оплату через Platega. Пока платежи проходят через ручную проверку администратором.",
   },
 ];
 
@@ -443,7 +443,7 @@ function planCard(plan) {
         <span class="badge">${plan.days} дн.</span>
       </div>
       <div class="price">${money(plan.priceRub)} <small>около ${money(daily)} в день</small></div>
-      <button class="btn primary" data-buy="${plan.code}">💳 Оформить</button>
+      <button class="btn primary" data-buy="${plan.code}">✅ Принять и оформить</button>
     </article>
   `;
 }
@@ -454,7 +454,7 @@ function paymentPanel() {
   const details =
     state.me?.paymentDetails ||
     "Реквизиты ещё не настроены. Напишите в поддержку.";
-  const yookassaReady = Boolean(state.me?.payment?.yookassaReady);
+  const onlinePaymentReady = Boolean(state.me?.payment?.yookassaReady);
   const paymentUrl = order.payment_url || order.paymentUrl;
   return `
     <section class="panel payment-box">
@@ -466,17 +466,17 @@ function paymentPanel() {
         <span class="badge warn">${money(order.amount_rub)}</span>
       </div>
       <div class="subtle-card">
-        <strong>${yookassaReady ? "💳 Оплата через ЮKassa" : "💳 Онлайн-оплата готовится"}</strong>
+        <strong>${onlinePaymentReady ? "💳 Оплата онлайн" : "💳 Онлайн-оплата через Platega готовится"}</strong>
         <div class="row-meta">
           ${
-            yookassaReady
+            onlinePaymentReady
               ? "Нажмите кнопку оплаты. После успешного платежа подписка активируется автоматически."
-              : "Пока оплата проходит через ручную проверку. Поля ЮKassa уже подготовлены в настройках сервера."
+              : "Пока оплата проходит через ручную проверку. Platega будет подключена после согласования проекта и получения API."
           }
         </div>
       </div>
       ${
-        yookassaReady
+        onlinePaymentReady
           ? `
             <div class="actions compact-actions">
               ${
@@ -512,9 +512,15 @@ function plansView() {
         <h2 class="title">Выберите срок доступа</h2>
         <p class="subtitle">${
           state.me?.payment?.yookassaReady
-            ? "После оплаты через ЮKassa подписка активируется автоматически. Mini App покажет ссылку для подключения."
+            ? "После онлайн-оплаты подписка активируется автоматически. Mini App покажет ссылку для подключения."
             : "После оплаты админ подтвердит платёж, и Mini App покажет подписку для подключения."
         }</p>
+        <p class="legal-note">
+          Оформляя заказ, вы принимаете
+          <button class="text-link" data-link="/terms">Пользовательское соглашение</button>
+          и
+          <button class="text-link" data-link="/privacy">Политику конфиденциальности</button>.
+        </p>
       </section>
       <div class="plan-grid">
         ${state.plans.map(planCard).join("")}
@@ -530,7 +536,7 @@ function supportView() {
       <section class="panel">
         <p class="eyebrow">💬 Поддержка</p>
         <h2 class="title">Напишите, что случилось</h2>
-        <p class="subtitle">Лучше сразу указать устройство, сеть и что пишет приложение. Ответ придёт в Telegram.</p>
+        <p class="subtitle">Это официальная тикет-система поддержки. Сразу укажите устройство, сеть и текст ошибки. Ответ придёт в Telegram.</p>
         <div class="field">
           <label for="supportText">Сообщение</label>
           <textarea id="supportText" placeholder="Например: на Wi-Fi не подключается, Happ пишет timeout"></textarea>
@@ -568,8 +574,8 @@ function profileView() {
   const sub = state.me?.subscription;
   const details = statusDetails(sub?.status, sub?.isActive);
   const paymentMode = state.me?.payment?.yookassaReady
-    ? "ЮKassa подключается"
-    : "ручная проверка";
+    ? "онлайн"
+    : "Platega готовится";
   return `
     <main class="view">
       <section class="panel profile-card">
@@ -598,6 +604,16 @@ function profileView() {
         <p class="eyebrow">🧭 Полезно</p>
         <h2 class="title">Одна ссылка, несколько устройств</h2>
         <p class="subtitle">Добавьте подписку в Happ один раз. Новые серверы и изменения будут появляться после обновления профиля.</p>
+      </section>
+      <section class="panel tight">
+        <p class="eyebrow">📚 Документы</p>
+        <h2 class="title">Условия сервиса</h2>
+        <p class="subtitle">Тарифы, правила обработки данных и условия использования всегда доступны здесь.</p>
+        <div class="actions compact-actions document-actions">
+          <button class="btn ghost" data-link="/documents">📋 Все документы</button>
+          <button class="btn ghost" data-link="/privacy">🔒 Политика</button>
+          <button class="btn ghost" data-link="/terms">📄 Соглашение</button>
+        </div>
       </section>
     </main>
   `;
@@ -771,8 +787,9 @@ async function copyText(text) {
 }
 
 function openLink(url) {
-  if (tg?.openLink) tg.openLink(url);
-  else window.open(url, "_blank", "noopener");
+  const target = new URL(url, location.origin).href;
+  if (tg?.openLink) tg.openLink(target);
+  else window.open(target, "_blank", "noopener");
 }
 
 async function handleClick(event) {

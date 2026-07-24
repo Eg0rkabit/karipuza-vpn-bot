@@ -410,7 +410,8 @@ button {
 }
 
 .btn:focus-visible,
-.nav-btn:focus-visible {
+.nav-btn:focus-visible,
+.text-link:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 2px;
 }
@@ -697,6 +698,30 @@ button {
   font-size: 13px;
   line-height: 1.45;
   margin: 10px 0 0;
+}
+
+.legal-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+}
+
+.text-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--teal);
+  text-underline-offset: 3px;
+}
+
+.document-actions {
+  grid-template-columns: 1fr;
 }
 
 .steps {

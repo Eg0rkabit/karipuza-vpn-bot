@@ -27,7 +27,12 @@ def button(text: str, callback: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, callback_data=callback)
 
 
-def main_keyboard(is_admin: bool, mini_app_url: str = "") -> InlineKeyboardMarkup:
+def main_keyboard(
+    is_admin: bool,
+    mini_app_url: str = "",
+    privacy_url: str = "",
+    terms_url: str = "",
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if mini_app_url:
         rows.append(
@@ -54,6 +59,17 @@ def main_keyboard(is_admin: bool, mini_app_url: str = "") -> InlineKeyboardMarku
             ],
         ]
     )
+    legal_buttons: list[InlineKeyboardButton] = []
+    if privacy_url:
+        legal_buttons.append(
+            InlineKeyboardButton(text="🔒 Политика", url=privacy_url)
+        )
+    if terms_url:
+        legal_buttons.append(
+            InlineKeyboardButton(text="📄 Соглашение", url=terms_url)
+        )
+    if legal_buttons:
+        rows.append(legal_buttons)
     if is_admin:
         rows.append([button("🛠 Админ-панель", "admin:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -62,7 +78,7 @@ def main_keyboard(is_admin: bool, mini_app_url: str = "") -> InlineKeyboardMarku
 def main_text(first_name: str | None = None) -> str:
     greeting = f", {html.escape(first_name)}" if first_name else ""
     return (
-        f"<b>Karipaza Froxy — быстрый доступ к свободному интернету</b>\n\n"
+        f"<b>Karipaza Froxy — защищённое подключение для ваших устройств</b>\n\n"
         f"👋 Добро пожаловать в Karipaza Froxy{greeting}!\n\n"
         "Здесь ты можешь быстро подключить защищённый доступ для своих устройств. "
         "Karipaza Froxy помогает сохранить приватность, пользоваться интернетом "
@@ -104,16 +120,37 @@ def plan_text(tariff: Tariff) -> str:
         f"В день: <b>около {daily:.0f} ₽</b>\n"
         "Трафик: <b>без ограничений</b>\n\n"
         "После оплаты администратор проверит платёж, "
-        "и бот автоматически выдаст подписку."
+        "и бот автоматически выдаст подписку.\n\n"
+        "Нажимая «Принять и оформить», вы подтверждаете, что ознакомились "
+        "с Пользовательским соглашением и Политикой конфиденциальности."
     )
 
 
-def plan_keyboard(tariff: Tariff) -> InlineKeyboardMarkup:
-    return kb(
-        [button("Оформить", f"order:create:{tariff.code}")],
-        [button("Назад к тарифам", "plans")],
-        [button("Главное меню", "home")],
+def plan_keyboard(
+    tariff: Tariff,
+    privacy_url: str = "",
+    terms_url: str = "",
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    legal_buttons: list[InlineKeyboardButton] = []
+    if privacy_url:
+        legal_buttons.append(
+            InlineKeyboardButton(text="🔒 Политика", url=privacy_url)
+        )
+    if terms_url:
+        legal_buttons.append(
+            InlineKeyboardButton(text="📄 Соглашение", url=terms_url)
+        )
+    if legal_buttons:
+        rows.append(legal_buttons)
+    rows.extend(
+        [
+            [button("✅ Принять и оформить", f"order:create:{tariff.code}")],
+            [button("Назад к тарифам", "plans")],
+            [button("Главное меню", "home")],
+        ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def order_text(order, payment_details: str) -> str:

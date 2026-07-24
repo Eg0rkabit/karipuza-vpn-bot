@@ -41,7 +41,12 @@ def create_router(
         return tg_id in settings.admin_ids
 
     def main_menu_keyboard(tg_id: int):
-        return ui.main_keyboard(is_admin(tg_id), settings.mini_app_url)
+        return ui.main_keyboard(
+            is_admin(tg_id),
+            settings.mini_app_url,
+            settings.privacy_url,
+            settings.terms_url,
+        )
 
     async def ensure_user(message_or_callback: Message | CallbackQuery) -> None:
         user = message_or_callback.from_user
@@ -283,7 +288,15 @@ def create_router(
         if not tariff:
             await callback.answer("Тариф не найден.", show_alert=True)
             return
-        await render(callback, ui.plan_text(tariff), ui.plan_keyboard(tariff))
+        await render(
+            callback,
+            ui.plan_text(tariff),
+            ui.plan_keyboard(
+                tariff,
+                settings.privacy_url,
+                settings.terms_url,
+            ),
+        )
 
     @router.callback_query(F.data.startswith("order:create:"))
     async def create_order(callback: CallbackQuery) -> None:

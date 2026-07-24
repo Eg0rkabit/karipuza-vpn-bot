@@ -68,6 +68,8 @@ class Settings:
 
     action_cooldown_seconds: float
     heavy_action_cooldown_seconds: float
+    legal_support_contact: str = ""
+    legal_effective_date: str = "24.07.2026"
 
     @property
     def remnawave_ready(self) -> bool:
@@ -84,6 +86,23 @@ class Settings:
             and self.yookassa_secret_key
             and self.yookassa_return_url
         )
+
+    def public_url(self, path: str) -> str:
+        if not self.mini_app_url:
+            return ""
+        return f"{self.mini_app_url.rstrip('/')}/{path.lstrip('/')}"
+
+    @property
+    def privacy_url(self) -> str:
+        return self.public_url("/privacy")
+
+    @property
+    def terms_url(self) -> str:
+        return self.public_url("/terms")
+
+    @property
+    def documents_url(self) -> str:
+        return self.public_url("/documents")
 
 
 settings = Settings(
@@ -120,6 +139,10 @@ settings = Settings(
     heavy_action_cooldown_seconds=float(
         os.getenv("HEAVY_ACTION_COOLDOWN_SECONDS", "3")
     ),
+    legal_support_contact=os.getenv("LEGAL_SUPPORT_CONTACT", "").strip(),
+    legal_effective_date=os.getenv(
+        "LEGAL_EFFECTIVE_DATE", "24.07.2026"
+    ).strip(),
 )
 
 

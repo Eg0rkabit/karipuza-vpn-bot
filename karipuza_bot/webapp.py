@@ -20,6 +20,7 @@ from aiohttp import web
 
 from .config import TARIFFS, TARIFFS_BY_CODE, Settings, settings, validate_settings
 from .database import Database
+from .legal import documents_page, privacy_page, terms_page
 from .remnawave import RemnawaveClient, Subscription
 from .yookassa import YooKassaClient, YooKassaError
 
@@ -313,6 +314,30 @@ async def index(request: web.Request) -> web.StreamResponse:
     response = web.FileResponse(STATIC_DIR / "index.html")
     response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
     return response
+
+
+def legal_response(content: str) -> web.Response:
+    response = web.Response(text=content, content_type="text/html", charset="utf-8")
+    response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; "
+        "base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+async def documents(request: web.Request) -> web.Response:
+    return legal_response(documents_page(request.app["settings"]))
+
+
+async def privacy(request: web.Request) -> web.Response:
+    return legal_response(privacy_page(request.app["settings"]))
+
+
+async def terms(request: web.Request) -> web.Response:
+    return legal_response(terms_page(request.app["settings"]))
 
 
 async def health(request: web.Request) -> web.Response:
@@ -1313,6 +1338,9 @@ async def build_app(app_settings: Settings = settings) -> web.Application:
     app["mobile_rate_limits"] = {}
 
     app.router.add_get("/", index)
+    app.router.add_get("/documents", documents)
+    app.router.add_get("/privacy", privacy)
+    app.router.add_get("/terms", terms)
     app.router.add_get("/health", health)
     app.router.add_static("/assets", STATIC_DIR, show_index=False)
 

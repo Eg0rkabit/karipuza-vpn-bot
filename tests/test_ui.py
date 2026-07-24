@@ -38,3 +38,55 @@ class UiTests(unittest.TestCase):
         self.assertIn("Karipaza Froxy", text)
         self.assertNotIn("Karipuza VPN", text)
         self.assertIn("🚀 Karipaza Froxy", buttons)
+
+    def test_main_menu_has_permanent_legal_links(self) -> None:
+        keyboard = ui.main_keyboard(
+            False,
+            "https://app.example",
+            "https://app.example/privacy",
+            "https://app.example/terms",
+        )
+        buttons = [
+            button
+            for row in keyboard.inline_keyboard
+            for button in row
+        ]
+
+        self.assertTrue(
+            any(
+                button.text == "🔒 Политика"
+                and button.url == "https://app.example/privacy"
+                for button in buttons
+            )
+        )
+        self.assertTrue(
+            any(
+                button.text == "📄 Соглашение"
+                and button.url == "https://app.example/terms"
+                for button in buttons
+            )
+        )
+
+    def test_public_text_avoids_disallowed_positioning(self) -> None:
+        text = ui.main_text()
+
+        self.assertNotIn("свободному интернету", text.lower())
+        self.assertIn("защищённое подключение", text.lower())
+
+    def test_plan_requires_acceptance_and_links_documents(self) -> None:
+        tariff = ui.TARIFFS[0]
+        keyboard = ui.plan_keyboard(
+            tariff,
+            "https://app.example/privacy",
+            "https://app.example/terms",
+        )
+        buttons = [
+            button
+            for row in keyboard.inline_keyboard
+            for button in row
+        ]
+
+        self.assertIn("ознакомились", ui.plan_text(tariff))
+        self.assertTrue(
+            any(button.text == "✅ Принять и оформить" for button in buttons)
+        )

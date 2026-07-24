@@ -144,3 +144,36 @@ class MobileApiTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(response.status, 400)
+
+    async def test_public_legal_pages_are_available_without_auth(self) -> None:
+        expected = {
+            "/documents": (
+                "Документы и тарифы",
+                "299 ₽",
+                "2799 ₽",
+            ),
+            "/privacy": (
+                "Политика конфиденциальности",
+                "тикет-система",
+                "Platega",
+            ),
+            "/terms": (
+                "Пользовательское соглашение",
+                "Отказ от услуги и возврат",
+                "фактических расходов",
+            ),
+        }
+
+        for path, snippets in expected.items():
+            with self.subTest(path=path):
+                response = await self.client.get(path)
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.content_type, "text/html")
+                self.assertIn(
+                    "default-src 'none'",
+                    response.headers["Content-Security-Policy"],
+                )
+                body = await response.text()
+                self.assertIn("Karipaza Froxy", body)
+                for snippet in snippets:
+                    self.assertIn(snippet, body)
