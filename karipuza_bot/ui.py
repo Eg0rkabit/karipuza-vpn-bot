@@ -59,17 +59,8 @@ def main_keyboard(
             ],
         ]
     )
-    legal_buttons: list[InlineKeyboardButton] = []
-    if privacy_url:
-        legal_buttons.append(
-            InlineKeyboardButton(text="🔒 Политика", url=privacy_url)
-        )
-    if terms_url:
-        legal_buttons.append(
-            InlineKeyboardButton(text="📄 Соглашение", url=terms_url)
-        )
-    if legal_buttons:
-        rows.append(legal_buttons)
+    if privacy_url or terms_url:
+        rows.append([button("📚 Документы", "documents")])
     if is_admin:
         rows.append([button("🛠 Админ-панель", "admin:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -132,17 +123,10 @@ def plan_keyboard(
     terms_url: str = "",
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    legal_buttons: list[InlineKeyboardButton] = []
-    if privacy_url:
-        legal_buttons.append(
-            InlineKeyboardButton(text="🔒 Политика", url=privacy_url)
+    if privacy_url or terms_url:
+        rows.append(
+            [button("📚 Политика и соглашение", f"documents:plan:{tariff.code}")]
         )
-    if terms_url:
-        legal_buttons.append(
-            InlineKeyboardButton(text="📄 Соглашение", url=terms_url)
-        )
-    if legal_buttons:
-        rows.append(legal_buttons)
     rows.extend(
         [
             [button("✅ Принять и оформить", f"order:create:{tariff.code}")],
@@ -150,6 +134,41 @@ def plan_keyboard(
             [button("Главное меню", "home")],
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def documents_text() -> str:
+    return (
+        "<b>Документы Karipaza Froxy</b>\n\n"
+        "Выберите документ, который хотите открыть:"
+    )
+
+
+def documents_keyboard(
+    privacy_url: str = "",
+    terms_url: str = "",
+    back_callback: str = "home",
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if privacy_url:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🔒 Политика конфиденциальности",
+                    url=privacy_url,
+                )
+            ]
+        )
+    if terms_url:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="📄 Пользовательское соглашение",
+                    url=terms_url,
+                )
+            ]
+        )
+    rows.append([button("Назад", back_callback)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -266,7 +285,6 @@ def subscription_keyboard(
 
 
 def profile_text(
-    tg_id: int,
     first_name: str | None,
     username: str | None,
     subscription: Subscription | None,
@@ -295,8 +313,7 @@ def profile_text(
     return (
         "<b>Профиль Karipaza Froxy</b>\n\n"
         f"Имя: <b>{html.escape(str(name))}</b>\n"
-        f"Username: <b>{html.escape(username_text)}</b>\n"
-        f"Telegram ID: <code>{tg_id}</code>\n\n"
+        f"Username: <b>{html.escape(username_text)}</b>\n\n"
         f"Статус: <b>{html.escape(status)}</b>\n"
         f"Подписка до: <b>{expire_at}</b>\n"
         f"Использовано: <b>{traffic}</b>"

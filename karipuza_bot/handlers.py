@@ -272,13 +272,39 @@ def create_router(
         await render(
             callback,
             ui.profile_text(
-                callback.from_user.id,
                 callback.from_user.first_name,
                 callback.from_user.username,
                 remote,
                 local,
             ),
             ui.profile_keyboard(bool(url)),
+        )
+
+    @router.callback_query(F.data == "documents")
+    async def documents(callback: CallbackQuery) -> None:
+        await render(
+            callback,
+            ui.documents_text(),
+            ui.documents_keyboard(
+                settings.privacy_url,
+                settings.terms_url,
+            ),
+        )
+
+    @router.callback_query(F.data.startswith("documents:plan:"))
+    async def plan_documents(callback: CallbackQuery) -> None:
+        code = (callback.data or "").rsplit(":", 1)[1]
+        if code not in TARIFFS_BY_CODE:
+            await callback.answer("Тариф не найден.", show_alert=True)
+            return
+        await render(
+            callback,
+            ui.documents_text(),
+            ui.documents_keyboard(
+                settings.privacy_url,
+                settings.terms_url,
+                f"plan:{code}",
+            ),
         )
 
     @router.callback_query(F.data.startswith("plan:"))

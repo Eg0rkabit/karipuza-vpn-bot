@@ -39,7 +39,7 @@ class UiTests(unittest.TestCase):
         self.assertNotIn("Karipuza VPN", text)
         self.assertIn("🚀 Karipaza Froxy", buttons)
 
-    def test_main_menu_has_permanent_legal_links(self) -> None:
+    def test_main_menu_has_single_documents_button(self) -> None:
         keyboard = ui.main_keyboard(
             False,
             "https://app.example",
@@ -52,16 +52,36 @@ class UiTests(unittest.TestCase):
             for button in row
         ]
 
+        document_buttons = [
+            button
+            for button in buttons
+            if button.callback_data == "documents"
+        ]
+        self.assertEqual(len(document_buttons), 1)
+        self.assertEqual(document_buttons[0].text, "📚 Документы")
+        self.assertFalse(any(button.url for button in document_buttons))
+
+    def test_documents_menu_contains_both_legal_pages(self) -> None:
+        keyboard = ui.documents_keyboard(
+            "https://app.example/privacy",
+            "https://app.example/terms",
+        )
+        buttons = [
+            button
+            for row in keyboard.inline_keyboard
+            for button in row
+        ]
+
         self.assertTrue(
             any(
-                button.text == "🔒 Политика"
+                button.text == "🔒 Политика конфиденциальности"
                 and button.url == "https://app.example/privacy"
                 for button in buttons
             )
         )
         self.assertTrue(
             any(
-                button.text == "📄 Соглашение"
+                button.text == "📄 Пользовательское соглашение"
                 and button.url == "https://app.example/terms"
                 for button in buttons
             )
@@ -90,3 +110,16 @@ class UiTests(unittest.TestCase):
         self.assertTrue(
             any(button.text == "✅ Принять и оформить" for button in buttons)
         )
+        self.assertTrue(
+            any(
+                button.text == "📚 Политика и соглашение"
+                and button.callback_data == "documents:plan:month_1"
+                for button in buttons
+            )
+        )
+
+    def test_user_profile_does_not_show_telegram_id(self) -> None:
+        text = ui.profile_text("Егор", "egor", None)
+
+        self.assertIn("@egor", text)
+        self.assertNotIn("Telegram ID", text)

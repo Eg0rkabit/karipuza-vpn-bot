@@ -586,7 +586,7 @@ function profileView() {
           <div>
             <p class="eyebrow">👤 Профиль</p>
             <h2 class="title">${escapeHtml(user.firstName || user.username || "Пользователь")}</h2>
-            <p class="subtitle">TG ID ${escapeHtml(user.tgId)}</p>
+            <p class="subtitle">${user.username ? `@${escapeHtml(user.username)}` : "Личный кабинет"}</p>
           </div>
         </div>
         <div class="profile-grid">
@@ -610,9 +610,7 @@ function profileView() {
         <h2 class="title">Условия сервиса</h2>
         <p class="subtitle">Тарифы, правила обработки данных и условия использования всегда доступны здесь.</p>
         <div class="actions compact-actions document-actions">
-          <button class="btn ghost" data-link="/documents">📋 Все документы</button>
-          <button class="btn ghost" data-link="/privacy">🔒 Политика</button>
-          <button class="btn ghost" data-link="/terms">📄 Соглашение</button>
+          <button class="btn ghost" data-link="/documents">📚 Политика и соглашение</button>
         </div>
       </section>
     </main>
