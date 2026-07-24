@@ -289,9 +289,7 @@ class Database:
             )
             await db.commit()
 
-    async def get_mobile_auth_request(
-        self, request_id: str
-    ) -> aiosqlite.Row | None:
+    async def get_mobile_auth_request(self, request_id: str) -> aiosqlite.Row | None:
         async with self.connect() as db:
             cursor = await db.execute(
                 "SELECT * FROM mobile_auth_requests WHERE request_id = ?",
@@ -435,9 +433,7 @@ class Database:
             await db.commit()
             return "AUTHORIZED", tg_id
 
-    async def get_mobile_session(
-        self, token_hash: str
-    ) -> aiosqlite.Row | None:
+    async def get_mobile_session(self, token_hash: str) -> aiosqlite.Row | None:
         now = int(time.time())
         async with self.connect() as db:
             cursor = await db.execute(
@@ -713,15 +709,23 @@ class Database:
             )
             return await cursor.fetchall()
 
-    async def create_ticket(self, tg_id: int, text: str) -> int:
+    async def create_ticket(
+        self,
+        tg_id: int,
+        text: str,
+        *,
+        subject: str = "Поддержка",
+    ) -> int:
         now = int(time.time())
         async with self.connect() as db:
             cursor = await db.execute(
                 """
-                INSERT INTO tickets (tg_id, status, created_at, updated_at)
-                VALUES (?, 'OPEN', ?, ?)
+                INSERT INTO tickets (
+                    tg_id, status, subject, created_at, updated_at
+                )
+                VALUES (?, 'OPEN', ?, ?, ?)
                 """,
-                (tg_id, now, now),
+                (tg_id, subject[:100], now, now),
             )
             ticket_id = int(cursor.lastrowid)
             await db.execute(

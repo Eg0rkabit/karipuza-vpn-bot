@@ -73,6 +73,7 @@ body::after {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -625,6 +626,7 @@ button {
 }
 
 .plan-card {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 14px;
@@ -635,6 +637,22 @@ button {
     transform var(--motion-base) var(--ease-out),
     border-color var(--motion-base) ease,
     box-shadow var(--motion-base) ease;
+}
+
+.plan-card.featured {
+  border-color: rgba(34, 193, 200, 0.62);
+  box-shadow: inset 3px 0 0 rgba(34, 193, 200, 0.72);
+}
+
+.plan-label {
+  justify-self: start;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #15383d;
+  color: #b9f5f7;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .price {
@@ -668,6 +686,147 @@ button {
   font-size: 13px;
 }
 
+.benefit-grid {
+  display: grid;
+  margin-top: 10px;
+}
+
+.benefit-item {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+
+.benefit-item:first-child {
+  border-top: 0;
+}
+
+.benefit-icon {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(34, 193, 200, 0.32);
+  border-radius: 8px;
+  background: #10272c;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+}
+
+.benefit-item strong {
+  display: block;
+  font-size: 14px;
+}
+
+.benefit-item p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.faq-list {
+  display: grid;
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-item summary {
+  padding: 12px 24px 12px 0;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.faq-item p {
+  margin: -2px 0 13px;
+  color: var(--soft);
+  font-size: 13px;
+  line-height: 1.48;
+}
+
+.ticket-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ticket-thread {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.ticket-thread > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ticket-thread > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ticket-thread > summary strong,
+.ticket-thread > summary small {
+  display: block;
+}
+
+.ticket-thread > summary strong {
+  font-size: 14px;
+}
+
+.ticket-thread > summary small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ticket-thread-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.ticket-thread-body .message-stack {
+  padding-top: 12px;
+}
+
+.message-bubble {
+  display: grid;
+  gap: 4px;
+}
+
+.message-bubble strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.message-bubble span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message-bubble.admin-message {
+  border-left: 3px solid var(--teal);
+}
+
+.message-bubble.user-message {
+  border-left: 3px solid #6f7e8d;
+}
+
 .payment-box {
   display: grid;
   gap: 10px;
@@ -696,9 +855,9 @@ button {
 }
 
 .field textarea,
-.field input {
+.field input,
+.field select {
   width: 100%;
-  min-height: 96px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: #0f1318;
@@ -708,8 +867,17 @@ button {
   outline: none;
 }
 
+.field textarea {
+  min-height: 96px;
+}
+
 .field input {
   min-height: 44px;
+}
+
+.field select {
+  min-height: 44px;
+  resize: none;
 }
 
 .hint {

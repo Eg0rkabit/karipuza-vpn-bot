@@ -28,6 +28,8 @@ class Tariff:
     days: int
     price_rub: int
     previous_price_rub: int
+    marketing_label: str
+    featured: bool = False
 
     @property
     def discount_percent(self) -> int:
@@ -43,9 +45,9 @@ class Tariff:
 
 
 TARIFFS: tuple[Tariff, ...] = (
-    Tariff("month_1", "1 месяц", 30, 229, 299),
-    Tariff("month_3", "3 месяца", 90, 549, 799),
-    Tariff("year_1", "1 год", 365, 1979, 2799),
+    Tariff("month_1", "1 месяц", 30, 229, 299, "Лёгкий старт"),
+    Tariff("month_3", "3 месяца", 90, 549, 799, "Популярный", True),
+    Tariff("year_1", "1 год", 365, 1979, 2799, "Самый выгодный"),
 )
 
 TARIFFS_BY_CODE = {tariff.code: tariff for tariff in TARIFFS}

@@ -154,7 +154,11 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             ("support_new", {"source": "menu"}),
         )
 
-        ticket_id = await self.db.create_ticket(100, "Не подключается")
+        ticket_id = await self.db.create_ticket(
+            100,
+            "Не подключается",
+            subject="Подключение",
+        )
         await self.db.add_ticket_message(
             ticket_id,
             sender_tg_id=1,
@@ -164,6 +168,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         ticket = await self.db.get_ticket(ticket_id)
 
         self.assertEqual(ticket["status"], "OPEN")
+        self.assertEqual(ticket["subject"], "Подключение")
         self.assertEqual((await self.db.stats())["tickets"], 1)
 
     async def test_mobile_auth_creates_and_revokes_device_session(self) -> None:

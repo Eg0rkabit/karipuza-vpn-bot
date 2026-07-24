@@ -12,6 +12,7 @@ from aiogram.types import (
 )
 
 from .config import TARIFFS, Tariff
+from .content import FAQS, SUBSCRIPTION_BENEFITS, SUPPORT_TOPICS, FaqItem, SupportTopic
 from .remnawave import Subscription
 
 HAPP_ANDROID = "https://play.google.com/store/apps/details?id=com.happproxy"
@@ -55,6 +56,10 @@ def main_keyboard(
                 button("📲 Инструкция", "instruction"),
             ],
             [
+                button("✨ Что даёт подписка", "benefits"),
+                button("❓ Частые вопросы", "faq"),
+            ],
+            [
                 button("💬 Поддержка", "support"),
             ],
         ]
@@ -83,7 +88,7 @@ def plans_keyboard() -> InlineKeyboardMarkup:
         rows.append(
             [
                 button(
-                    f"{tariff.title} · {tariff.price_rub} ₽ · −{tariff.discount_percent}%",
+                    f"{tariff.title} · {tariff.price_rub} ₽ · {tariff.marketing_label}",
                     f"plan:{tariff.code}",
                 )
             ]
@@ -104,7 +109,8 @@ def plans_text() -> str:
 def plan_text(tariff: Tariff) -> str:
     daily = tariff.price_rub / tariff.days
     return (
-        f"<b>{html.escape(tariff.title)}</b>\n\n"
+        f"<b>{html.escape(tariff.title)}</b>\n"
+        f"⭐ {html.escape(tariff.marketing_label)}\n\n"
         f"Новая цена: <b>{tariff.price_rub} ₽</b> "
         f"<s>{tariff.previous_price_rub} ₽</s>\n"
         f"Скидка: <b>{tariff.discount_percent}%</b>\n"
@@ -130,6 +136,7 @@ def plan_keyboard(
     rows.extend(
         [
             [button("✅ Принять и оформить", f"order:create:{tariff.code}")],
+            [button("✨ Что даёт подписка", "benefits")],
             [button("Назад к тарифам", "plans")],
             [button("Главное меню", "home")],
         ]
@@ -169,6 +176,60 @@ def documents_keyboard(
         )
     rows.append([button("Назад", back_callback)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def benefits_text() -> str:
+    lines = [
+        "<b>✨ Что даёт подписка</b>",
+        "",
+        "В каждый тариф уже входит:",
+        "",
+    ]
+    for benefit in SUBSCRIPTION_BENEFITS:
+        lines.append(
+            f"<b>{benefit.icon} {html.escape(benefit.title)}</b>\n"
+            f"{html.escape(benefit.description)}"
+        )
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def benefits_keyboard() -> InlineKeyboardMarkup:
+    return kb(
+        [button("💳 Выбрать тариф", "plans")],
+        [button("❓ Частые вопросы", "faq")],
+        [button("Главное меню", "home")],
+    )
+
+
+def faq_text() -> str:
+    return (
+        "<b>❓ Частые вопросы</b>\n\n"
+        "Выберите вопрос. Если готового ответа не хватит, можно сразу написать в поддержку."
+    )
+
+
+def faq_keyboard() -> InlineKeyboardMarkup:
+    rows = [[button(item.question, f"faq:{item.code}")] for item in FAQS]
+    rows.extend(
+        [
+            [button("💬 Написать в поддержку", "support:new")],
+            [button("Главное меню", "home")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def faq_answer_text(item: FaqItem) -> str:
+    return f"<b>{html.escape(item.question)}</b>\n\n{html.escape(item.answer)}"
+
+
+def faq_answer_keyboard() -> InlineKeyboardMarkup:
+    return kb(
+        [button("Все вопросы", "faq")],
+        [button("💬 Написать в поддержку", "support:new")],
+        [button("Главное меню", "home")],
+    )
 
 
 def order_text(order, payment_details: str) -> str:
@@ -357,20 +418,126 @@ def instruction_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def support_text() -> str:
+def support_text(tickets=()) -> str:
+    open_count = sum(1 for ticket in tickets if ticket["status"] == "OPEN")
+    status = f"\n\nСейчас открытых обращений: <b>{open_count}</b>." if tickets else ""
     return (
-        "<b>Поддержка</b>\n\n"
-        "Опишите проблему одним сообщением. Можно написать, "
-        "на каком устройстве и через какую сеть не работает подключение.\n\n"
-        "Ответ администратора придёт прямо в этот чат."
+        "<b>💬 Поддержка</b>\n\n"
+        "Выберите тему, подробно опишите вопрос и продолжайте переписку "
+        "в одном обращении. Ответ придёт прямо в этот чат."
+        f"{status}"
     )
 
 
-def support_keyboard() -> InlineKeyboardMarkup:
-    return kb(
-        [button("Создать обращение", "support:new")],
-        [button("Главное меню", "home")],
+def support_keyboard(has_tickets: bool = False) -> InlineKeyboardMarkup:
+    rows = [
+        [button("✍️ Новое обращение", "support:new")],
+        [button("❓ Частые вопросы", "faq")],
+    ]
+    if has_tickets:
+        rows.insert(1, [button("📨 Мои обращения", "support:tickets")])
+    rows.append([button("Главное меню", "home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def support_topics_text() -> str:
+    return (
+        "<b>Новое обращение</b>\n\n"
+        "Сначала выберите тему. Так обращение будет понятнее, "
+        "а поддержка быстрее увидит нужные детали."
     )
+
+
+def support_topics_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [button(f"{topic.icon} {topic.title}", f"support:topic:{topic.code}")]
+        for topic in SUPPORT_TOPICS
+    ]
+    rows.extend(
+        [
+            [button("❓ Сначала посмотреть ответы", "faq")],
+            [button("Назад", "support")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def support_new_text(topic: SupportTopic) -> str:
+    return (
+        f"<b>{topic.icon} {html.escape(topic.title)}</b>\n\n"
+        f"{html.escape(topic.prompt)}\n\n"
+        "Отправьте описание следующим сообщением. Можно приложить фотографию "
+        "или документ с подписью.\n\n"
+        "Для отмены нажмите кнопку ниже."
+    )
+
+
+def user_tickets_text(tickets) -> str:
+    if not tickets:
+        return "<b>📨 Мои обращения</b>\n\nУ вас пока нет обращений в поддержку."
+    open_count = sum(1 for ticket in tickets if ticket["status"] == "OPEN")
+    return (
+        "<b>📨 Мои обращения</b>\n\n"
+        f"Открыто: <b>{open_count}</b>. Выберите обращение, чтобы посмотреть переписку."
+    )
+
+
+def user_tickets_keyboard(tickets) -> InlineKeyboardMarkup:
+    rows = []
+    for ticket in tickets:
+        marker = "🟡" if ticket["status"] == "OPEN" else "🟢"
+        subject = str(ticket["subject"] or "Поддержка")
+        rows.append(
+            [
+                button(
+                    f"{marker} #{ticket['id']} · {subject[:35]}",
+                    f"support:ticket:{ticket['id']}",
+                )
+            ]
+        )
+    rows.extend(
+        [
+            [button("✍️ Новое обращение", "support:new")],
+            [button("Назад", "support")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def user_ticket_text(ticket, messages) -> str:
+    status = "открыто" if ticket["status"] == "OPEN" else "закрыто"
+    lines = [
+        f"<b>Обращение #{ticket['id']}</b>",
+        "",
+        f"Тема: <b>{html.escape(str(ticket['subject'] or 'Поддержка'))}</b>",
+        f"Статус: <b>{status}</b>",
+        "",
+        "<b>Переписка</b>",
+    ]
+    if not messages:
+        lines.append("Сообщений пока нет.")
+    for message in reversed(messages):
+        sender = "Поддержка" if message["sender_role"] == "ADMIN" else "Вы"
+        lines.append(f"\n<b>{sender}:</b>\n{html.escape(str(message['text'])[:3000])}")
+    return "\n".join(lines)
+
+
+def user_ticket_keyboard(ticket_id: int, is_open: bool) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if is_open:
+        rows.extend(
+            [
+                [button("↩️ Ответить", f"support:reply:{ticket_id}")],
+                [button("✅ Вопрос решён", f"support:close:{ticket_id}")],
+            ]
+        )
+    rows.extend(
+        [
+            [button("Все обращения", "support:tickets")],
+            [button("Главное меню", "home")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_home_text(stats: dict[str, int], vpn_ok: bool) -> str:
@@ -467,13 +634,21 @@ def admin_tickets_text(tickets) -> str:
     lines = ["<b>Открытые обращения</b>", ""]
     for ticket in tickets:
         name = ticket["first_name"] or ticket["username"] or f"ID {ticket['tg_id']}"
-        lines.append(f"#{ticket['id']} · {html.escape(str(name))}")
+        subject = ticket["subject"] or "Поддержка"
+        lines.append(
+            f"#{ticket['id']} · {html.escape(str(subject))} · {html.escape(str(name))}"
+        )
     return "\n".join(lines)
 
 
 def admin_tickets_keyboard(tickets) -> InlineKeyboardMarkup:
     rows = [
-        [button(f"Обращение #{ticket['id']}", f"admin:ticket:view:{ticket['id']}")]
+        [
+            button(
+                f"#{ticket['id']} · {str(ticket['subject'] or 'Поддержка')[:35]}",
+                f"admin:ticket:view:{ticket['id']}",
+            )
+        ]
         for ticket in tickets
     ]
     rows.extend(
@@ -485,16 +660,28 @@ def admin_tickets_keyboard(tickets) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_ticket_text(ticket) -> str:
+def admin_ticket_text(ticket, messages=()) -> str:
     name = ticket["first_name"] or "без имени"
     username = f"@{ticket['username']}" if ticket["username"] else "не указан"
-    return (
+    text = (
         f"<b>Обращение #{ticket['id']}</b>\n\n"
+        f"Тема: <b>{html.escape(str(ticket['subject'] or 'Поддержка'))}</b>\n"
         f"Пользователь: <b>{html.escape(str(name))}</b>\n"
         f"Username: {html.escape(username)}\n"
         f"Telegram ID: <code>{ticket['tg_id']}</code>\n"
         f"Статус: <b>{html.escape(ticket['status'])}</b>"
     )
+    if messages:
+        lines = [text, "", "<b>Последние сообщения</b>"]
+        for message in reversed(messages):
+            sender = (
+                "Администратор" if message["sender_role"] == "ADMIN" else "Пользователь"
+            )
+            lines.append(
+                f"\n<b>{sender}:</b>\n{html.escape(str(message['text'])[:1500])}"
+            )
+        return "\n".join(lines)
+    return text
 
 
 def admin_users_text(users, page: int, total: int) -> str:

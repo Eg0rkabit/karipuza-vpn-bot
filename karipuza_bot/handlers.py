@@ -22,6 +22,7 @@ from aiogram.types import (
 
 from . import ui
 from .config import Settings, TARIFFS_BY_CODE
+from .content import FAQS_BY_CODE, SUPPORT_TOPICS_BY_CODE
 from .database import Database
 from .remnawave import RemnawaveClient, Subscription
 
@@ -196,9 +197,10 @@ def create_router(
 
         if command_payload == "support":
             await db.clear_session(message.from_user.id)
+            tickets = await db.list_user_tickets(message.from_user.id, 10)
             await message.answer(
-                ui.support_text(),
-                reply_markup=ui.support_keyboard(),
+                ui.support_text(tickets),
+                reply_markup=ui.support_keyboard(bool(tickets)),
             )
             return
 
@@ -267,6 +269,27 @@ def create_router(
     async def plans(callback: CallbackQuery) -> None:
         await ensure_user(callback)
         await render(callback, ui.plans_text(), ui.plans_keyboard())
+
+    @router.callback_query(F.data == "benefits")
+    async def benefits(callback: CallbackQuery) -> None:
+        await render(callback, ui.benefits_text(), ui.benefits_keyboard())
+
+    @router.callback_query(F.data == "faq")
+    async def faq(callback: CallbackQuery) -> None:
+        await render(callback, ui.faq_text(), ui.faq_keyboard())
+
+    @router.callback_query(F.data.startswith("faq:"))
+    async def faq_answer(callback: CallbackQuery) -> None:
+        code = (callback.data or "").split(":", 1)[1]
+        item = FAQS_BY_CODE.get(code)
+        if not item:
+            await callback.answer("Ответ не найден.", show_alert=True)
+            return
+        await render(
+            callback,
+            ui.faq_answer_text(item),
+            ui.faq_answer_keyboard(),
+        )
 
     @router.callback_query(F.data == "profile")
     async def profile(callback: CallbackQuery, bot: Bot) -> None:
@@ -476,18 +499,113 @@ def create_router(
 
     @router.callback_query(F.data == "support")
     async def support(callback: CallbackQuery) -> None:
-        await render(callback, ui.support_text(), ui.support_keyboard())
+        await db.clear_session(callback.from_user.id)
+        tickets = await db.list_user_tickets(callback.from_user.id, 10)
+        await render(
+            callback,
+            ui.support_text(tickets),
+            ui.support_keyboard(bool(tickets)),
+        )
 
     @router.callback_query(F.data == "support:new")
     async def support_new(callback: CallbackQuery) -> None:
-        await db.set_session(callback.from_user.id, "support_new")
         await render(
             callback,
-            "<b>Новое обращение</b>\n\n"
-            "Опишите проблему следующим сообщением. "
-            "Чем точнее описание, тем быстрее получится помочь.\n\n"
-            "Для отмены: /cancel",
-            ui.kb([ui.button("Отменить", "home")]),
+            ui.support_topics_text(),
+            ui.support_topics_keyboard(),
+        )
+
+    @router.callback_query(F.data.startswith("support:topic:"))
+    async def support_topic(callback: CallbackQuery) -> None:
+        code = (callback.data or "").rsplit(":", 1)[1]
+        topic = SUPPORT_TOPICS_BY_CODE.get(code)
+        if not topic:
+            await callback.answer("Тема не найдена.", show_alert=True)
+            return
+        await db.set_session(
+            callback.from_user.id,
+            "support_new",
+            {"topic_code": topic.code, "subject": topic.title},
+        )
+        await render(
+            callback,
+            ui.support_new_text(topic),
+            ui.kb([ui.button("Отменить", "support")]),
+        )
+
+    @router.callback_query(F.data == "support:tickets")
+    async def support_tickets(callback: CallbackQuery) -> None:
+        await db.clear_session(callback.from_user.id)
+        tickets = await db.list_user_tickets(callback.from_user.id, 10)
+        await render(
+            callback,
+            ui.user_tickets_text(tickets),
+            ui.user_tickets_keyboard(tickets),
+        )
+
+    @router.callback_query(F.data.startswith("support:ticket:"))
+    async def support_ticket(callback: CallbackQuery) -> None:
+        await db.clear_session(callback.from_user.id)
+        ticket_id = int((callback.data or "").rsplit(":", 1)[1])
+        ticket = await db.get_ticket(ticket_id)
+        if not ticket or int(ticket["tg_id"]) != callback.from_user.id:
+            await callback.answer("Обращение не найдено.", show_alert=True)
+            return
+        messages = await db.list_ticket_messages(ticket_id, 20)
+        await render(
+            callback,
+            ui.user_ticket_text(ticket, messages),
+            ui.user_ticket_keyboard(ticket_id, ticket["status"] == "OPEN"),
+        )
+
+    @router.callback_query(F.data.startswith("support:reply:"))
+    async def support_reply(callback: CallbackQuery) -> None:
+        ticket_id = int((callback.data or "").rsplit(":", 1)[1])
+        ticket = await db.get_ticket(ticket_id)
+        if (
+            not ticket
+            or int(ticket["tg_id"]) != callback.from_user.id
+            or ticket["status"] != "OPEN"
+        ):
+            await callback.answer(
+                "Обращение закрыто или не найдено.",
+                show_alert=True,
+            )
+            return
+        await db.set_session(
+            callback.from_user.id,
+            "support_reply",
+            {"ticket_id": ticket_id},
+        )
+        await render(
+            callback,
+            f"<b>Ответ по обращению #{ticket_id}</b>\n\n"
+            "Отправьте сообщение. Можно приложить фотографию или документ с подписью.",
+            ui.kb([ui.button("Отменить", f"support:ticket:{ticket_id}")]),
+        )
+
+    @router.callback_query(F.data.startswith("support:close:"))
+    async def support_close(callback: CallbackQuery) -> None:
+        ticket_id = int((callback.data or "").rsplit(":", 1)[1])
+        ticket = await db.get_ticket(ticket_id)
+        if not ticket or int(ticket["tg_id"]) != callback.from_user.id:
+            await callback.answer("Обращение не найдено.", show_alert=True)
+            return
+        if ticket["status"] == "OPEN":
+            await db.close_ticket(ticket_id)
+            await db.audit(
+                "USER_TICKET_CLOSED",
+                actor_tg_id=callback.from_user.id,
+                entity_type="ticket",
+                entity_id=ticket_id,
+            )
+        ticket = await db.get_ticket(ticket_id)
+        messages = await db.list_ticket_messages(ticket_id, 20)
+        await render(
+            callback,
+            ui.user_ticket_text(ticket, messages)
+            + "\n\n<b>Готово:</b> обращение закрыто.",
+            ui.user_ticket_keyboard(ticket_id, False),
         )
 
     @router.callback_query(F.data == "admin:home")
@@ -630,6 +748,7 @@ def create_router(
     async def admin_tickets(callback: CallbackQuery) -> None:
         if not await require_admin(callback):
             return
+        await db.clear_session(callback.from_user.id)
         tickets = await db.list_tickets()
         await render(
             callback,
@@ -646,9 +765,10 @@ def create_router(
         if not ticket:
             await callback.answer("Обращение не найдено.", show_alert=True)
             return
+        messages = await db.list_ticket_messages(ticket_id, 10)
         await render(
             callback,
-            ui.admin_ticket_text(ticket),
+            ui.admin_ticket_text(ticket, messages),
             ui.ticket_admin_keyboard(ticket_id),
         )
 
@@ -872,7 +992,12 @@ def create_router(
             if not text:
                 await message.answer("Опишите проблему текстом или добавьте подпись.")
                 return
-            ticket_id = await db.create_ticket(message.from_user.id, text)
+            subject = str(payload.get("subject") or "Другой вопрос")[:100]
+            ticket_id = await db.create_ticket(
+                message.from_user.id,
+                text,
+                subject=subject,
+            )
             await db.clear_session(message.from_user.id)
             ticket = await db.get_ticket(ticket_id)
             for admin_id in settings.admin_ids:
@@ -893,8 +1018,58 @@ def create_router(
                     LOGGER.exception("Failed to send ticket %s to admin", ticket_id)
             await message.answer(
                 f"<b>Обращение #{ticket_id} создано</b>\n\n"
-                "Ответ администратора придёт в этот чат.",
-                reply_markup=main_menu_keyboard(message.from_user.id),
+                f"Тема: <b>{html.escape(subject)}</b>\n"
+                "Ответ поддержки придёт в этот чат. Продолжить переписку можно "
+                "в разделе «Мои обращения».",
+                reply_markup=ui.user_ticket_keyboard(ticket_id, True),
+            )
+            return
+
+        if state == "support_reply":
+            if not text:
+                await message.answer("Напишите ответ текстом или добавьте подпись.")
+                return
+            ticket_id = int(payload["ticket_id"])
+            ticket = await db.get_ticket(ticket_id)
+            if (
+                not ticket
+                or int(ticket["tg_id"]) != message.from_user.id
+                or ticket["status"] != "OPEN"
+            ):
+                await db.clear_session(message.from_user.id)
+                await message.answer("Обращение уже закрыто или не найдено.")
+                return
+            await db.add_ticket_message(
+                ticket_id,
+                sender_tg_id=message.from_user.id,
+                sender_role="USER",
+                text=text,
+            )
+            await db.clear_session(message.from_user.id)
+            for admin_id in settings.admin_ids:
+                try:
+                    if proof_type in {"PHOTO", "DOCUMENT"}:
+                        await bot.copy_message(
+                            admin_id,
+                            message.chat.id,
+                            message.message_id,
+                        )
+                    await bot.send_message(
+                        admin_id,
+                        f"<b>Новое сообщение по обращению #{ticket_id}</b>\n\n"
+                        f"Тема: <b>{html.escape(str(ticket['subject']))}</b>\n"
+                        f"{html.escape(text[:3000])}",
+                        reply_markup=ui.ticket_admin_keyboard(ticket_id),
+                    )
+                except Exception:
+                    LOGGER.exception(
+                        "Failed to send ticket reply %s to admin",
+                        ticket_id,
+                    )
+            await message.answer(
+                f"<b>Ответ добавлен в обращение #{ticket_id}</b>\n\n"
+                "Поддержка увидит новое сообщение.",
+                reply_markup=ui.user_ticket_keyboard(ticket_id, True),
             )
             return
 
@@ -928,7 +1103,7 @@ def create_router(
                 ticket["tg_id"],
                 f"<b>Ответ поддержки по обращению #{ticket_id}</b>\n\n"
                 f"{html.escape(message.text)}",
-                reply_markup=ui.support_keyboard(),
+                reply_markup=ui.user_ticket_keyboard(ticket_id, True),
             )
             await message.answer(
                 f"Ответ по обращению #{ticket_id} отправлен.",

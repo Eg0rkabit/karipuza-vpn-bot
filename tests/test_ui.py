@@ -21,6 +21,8 @@ class UiTests(unittest.TestCase):
         self.assertFalse(any("Админ-панель" in text for text in user_buttons))
         self.assertTrue(any("Админ-панель" in text for text in admin_buttons))
         self.assertTrue(any("Профиль" in text for text in user_buttons))
+        self.assertTrue(any("Что даёт подписка" in text for text in user_buttons))
+        self.assertTrue(any("Частые вопросы" in text for text in user_buttons))
 
     def test_user_name_is_escaped(self) -> None:
         text = ui.main_text("<Егор>")
@@ -98,6 +100,11 @@ class UiTests(unittest.TestCase):
         )
         self.assertNotIn("6 месяцев", ui.plans_text())
         self.assertIn("до 5", ui.plans_text().lower())
+        self.assertEqual(
+            [tariff.marketing_label for tariff in ui.TARIFFS],
+            ["Лёгкий старт", "Популярный", "Самый выгодный"],
+        )
+        self.assertTrue(ui.TARIFFS[1].featured)
 
     def test_plan_requires_acceptance_and_links_documents(self) -> None:
         tariff = ui.TARIFFS[0]
@@ -127,3 +134,34 @@ class UiTests(unittest.TestCase):
 
         self.assertIn("@egor", text)
         self.assertNotIn("Telegram ID", text)
+
+    def test_benefits_and_faq_are_available(self) -> None:
+        self.assertIn("Что даёт подписка", ui.benefits_text())
+        self.assertIn("До 5 устройств", ui.benefits_text())
+        self.assertIn("Частые вопросы", ui.faq_text())
+
+        faq_buttons = [
+            button.callback_data
+            for row in ui.faq_keyboard().inline_keyboard
+            for button in row
+        ]
+        self.assertIn("faq:connect", faq_buttons)
+        self.assertIn("support:new", faq_buttons)
+
+    def test_support_flow_contains_topics_and_ticket_actions(self) -> None:
+        topic_buttons = [
+            button.callback_data
+            for row in ui.support_topics_keyboard().inline_keyboard
+            for button in row
+        ]
+        self.assertIn("support:topic:connection", topic_buttons)
+        self.assertIn("support:topic:payment", topic_buttons)
+
+        ticket_keyboard = ui.user_ticket_keyboard(7, True)
+        ticket_callbacks = [
+            button.callback_data
+            for row in ticket_keyboard.inline_keyboard
+            for button in row
+        ]
+        self.assertIn("support:reply:7", ticket_callbacks)
+        self.assertIn("support:close:7", ticket_callbacks)

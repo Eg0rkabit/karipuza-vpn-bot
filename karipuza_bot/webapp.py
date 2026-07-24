@@ -19,6 +19,12 @@ import aiohttp
 from aiohttp import web
 
 from .config import TARIFFS, TARIFFS_BY_CODE, Settings, settings, validate_settings
+from .content import (
+    FAQS,
+    SUBSCRIPTION_BENEFITS,
+    SUPPORT_TOPICS,
+    SUPPORT_TOPICS_BY_CODE,
+)
 from .database import Database
 from .legal import documents_page, privacy_page, terms_page
 from .remnawave import RemnawaveClient, Subscription
@@ -43,6 +49,21 @@ def row_to_dict(row: Any | None) -> dict[str, Any] | None:
     if row is None:
         return None
     return {key: row[key] for key in row.keys()}
+
+
+async def ticket_to_dict(
+    db: Database,
+    ticket: Any,
+    *,
+    message_limit: int = 20,
+) -> dict[str, Any]:
+    item = row_to_dict(ticket) or {}
+    messages = [
+        row_to_dict(row)
+        for row in await db.list_ticket_messages(int(ticket["id"]), message_limit)
+    ]
+    item["messages"] = list(reversed(messages))
+    return item
 
 
 def days_left(timestamp: int) -> int:
@@ -660,7 +681,10 @@ async def api_me(request: web.Request) -> web.Response:
     db: Database = request.app["db"]
     subscription, local_user, sync_error = await sync_subscription(request, auth)
     orders = [row_to_dict(row) for row in await db.list_user_orders(auth.tg_id, 6)]
-    tickets = [row_to_dict(row) for row in await db.list_user_tickets(auth.tg_id, 5)]
+    tickets = [
+        await ticket_to_dict(db, row)
+        for row in await db.list_user_tickets(auth.tg_id, 5)
+    ]
     return web.json_response(
         {
             "user": {
@@ -701,10 +725,37 @@ async def api_plans(request: web.Request) -> web.Response:
                     "previousPriceRub": tariff.previous_price_rub,
                     "discountPercent": tariff.discount_percent,
                     "badge": tariff.badge,
+                    "marketingLabel": tariff.marketing_label,
+                    "featured": tariff.featured,
                     "deviceLimit": device_limit,
                 }
                 for tariff in TARIFFS
-            ]
+            ],
+            "benefits": [
+                {
+                    "icon": benefit.icon,
+                    "title": benefit.title,
+                    "description": benefit.description,
+                }
+                for benefit in SUBSCRIPTION_BENEFITS
+            ],
+            "faqs": [
+                {
+                    "code": item.code,
+                    "question": item.question,
+                    "answer": item.answer,
+                }
+                for item in FAQS
+            ],
+            "supportTopics": [
+                {
+                    "code": topic.code,
+                    "icon": topic.icon,
+                    "title": topic.title,
+                    "prompt": topic.prompt,
+                }
+                for topic in SUPPORT_TOPICS
+            ],
         }
     )
 
@@ -1001,20 +1052,99 @@ async def api_create_ticket(request: web.Request) -> web.Response:
     text = safe_text(data.get("text"))
     if not text:
         raise web.HTTPBadRequest(text="Message text is required")
+    topic_code = safe_text(data.get("topicCode")) or "other"
+    topic = SUPPORT_TOPICS_BY_CODE.get(topic_code)
+    if not topic:
+        raise web.HTTPBadRequest(text="Unknown support topic")
 
     db: Database = request.app["db"]
-    ticket_id = await db.create_ticket(auth.tg_id, text)
+    ticket_id = await db.create_ticket(
+        auth.tg_id,
+        text,
+        subject=topic.title,
+    )
     ticket = await db.get_ticket(ticket_id)
     user_name = auth.first_name or auth.username or f"TG {auth.tg_id}"
     await notify_admins(
         request.app,
         "<b>Новое обращение в поддержку</b>\n\n"
         f"Обращение: <b>#{ticket_id}</b>\n"
+        f"Тема: <b>{html.escape(topic.title)}</b>\n"
         f"Пользователь: <b>{html.escape(str(user_name))}</b>\n"
         f"Telegram ID: <code>{auth.tg_id}</code>\n\n"
         f"{html.escape(text)}",
     )
-    return web.json_response({"ok": True, "ticket": row_to_dict(ticket)}, status=201)
+    return web.json_response(
+        {"ok": True, "ticket": await ticket_to_dict(db, ticket)},
+        status=201,
+    )
+
+
+async def api_reply_ticket(request: web.Request) -> web.Response:
+    auth = await require_auth(request)
+    ticket_id = int(request.match_info["ticket_id"])
+    data = await read_json(request)
+    text = safe_text(data.get("text"))
+    if not text:
+        raise web.HTTPBadRequest(text="Message text is required")
+
+    db: Database = request.app["db"]
+    ticket = await db.get_ticket(ticket_id)
+    if not ticket or int(ticket["tg_id"]) != auth.tg_id:
+        raise web.HTTPNotFound(text="Ticket not found")
+    if ticket["status"] != "OPEN":
+        raise web.HTTPConflict(text="Ticket is closed")
+
+    await db.add_ticket_message(
+        ticket_id,
+        sender_tg_id=auth.tg_id,
+        sender_role="USER",
+        text=text,
+    )
+    user_name = auth.first_name or auth.username or f"TG {auth.tg_id}"
+    await notify_admins(
+        request.app,
+        f"<b>Новое сообщение по обращению #{ticket_id}</b>\n\n"
+        f"Тема: <b>{html.escape(str(ticket['subject']))}</b>\n"
+        f"Пользователь: <b>{html.escape(str(user_name))}</b>\n\n"
+        f"{html.escape(text)}",
+    )
+    return web.json_response(
+        {
+            "ok": True,
+            "ticket": await ticket_to_dict(
+                db,
+                await db.get_ticket(ticket_id),
+            ),
+        }
+    )
+
+
+async def api_close_ticket(request: web.Request) -> web.Response:
+    auth = await require_auth(request)
+    ticket_id = int(request.match_info["ticket_id"])
+    db: Database = request.app["db"]
+    ticket = await db.get_ticket(ticket_id)
+    if not ticket or int(ticket["tg_id"]) != auth.tg_id:
+        raise web.HTTPNotFound(text="Ticket not found")
+
+    if ticket["status"] == "OPEN":
+        await db.close_ticket(ticket_id)
+        await db.audit(
+            "WEBAPP_USER_TICKET_CLOSED",
+            actor_tg_id=auth.tg_id,
+            entity_type="ticket",
+            entity_id=ticket_id,
+        )
+    return web.json_response(
+        {
+            "ok": True,
+            "ticket": await ticket_to_dict(
+                db,
+                await db.get_ticket(ticket_id),
+            ),
+        }
+    )
 
 
 async def require_admin(request: web.Request) -> AuthUser:
@@ -1053,15 +1183,10 @@ async def api_admin_tickets(request: web.Request) -> web.Response:
     await require_admin(request)
     status = request.query.get("status") or "OPEN"
     db: Database = request.app["db"]
-    tickets = []
-    for ticket in await db.list_tickets(status=status, limit=50):
-        item = row_to_dict(ticket) or {}
-        messages = [
-            row_to_dict(row)
-            for row in await db.list_ticket_messages(int(ticket["id"]), limit=6)
-        ]
-        item["messages"] = list(reversed(messages))
-        tickets.append(item)
+    tickets = [
+        await ticket_to_dict(db, ticket, message_limit=6)
+        for ticket in await db.list_tickets(status=status, limit=50)
+    ]
     return web.json_response({"tickets": tickets})
 
 
@@ -1370,6 +1495,14 @@ async def build_app(app_settings: Settings = settings) -> web.Application:
     app.router.add_post(r"/api/orders/{order_id:\d+}/proof", api_submit_order_proof)
     app.router.add_post("/api/yookassa/webhook", api_yookassa_webhook)
     app.router.add_post("/api/support", api_create_ticket)
+    app.router.add_post(
+        r"/api/support/{ticket_id:\d+}/reply",
+        api_reply_ticket,
+    )
+    app.router.add_post(
+        r"/api/support/{ticket_id:\d+}/close",
+        api_close_ticket,
+    )
 
     app.router.add_post("/api/mobile/auth/start", api_mobile_auth_start)
     app.router.add_post("/api/mobile/auth/complete", api_mobile_auth_complete)

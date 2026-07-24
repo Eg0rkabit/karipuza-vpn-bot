@@ -12,6 +12,9 @@ const state = {
   tab: "home",
   me: null,
   plans: [],
+  benefits: [],
+  faqs: [],
+  supportTopics: [],
   activeOrder: null,
   admin: {
     summary: null,
@@ -231,6 +234,9 @@ async function loadBase() {
   const [me, plans] = await Promise.all([api("/api/me"), api("/api/plans")]);
   state.me = me;
   state.plans = plans.plans || [];
+  state.benefits = plans.benefits || [];
+  state.faqs = plans.faqs || [];
+  state.supportTopics = plans.supportTopics || [];
   if (!state.activeOrder) {
     state.activeOrder = (me.orders || []).find(
       (order) => order.status === "WAITING_PAYMENT",
@@ -432,11 +438,57 @@ function subscriptionView() {
   `;
 }
 
+function benefitsSection() {
+  return `
+    <section class="panel tight benefits-panel">
+      <p class="eyebrow">✨ Возможности</p>
+      <h2 class="title">Что даёт подписка</h2>
+      <div class="benefit-grid">
+        ${state.benefits
+          .map(
+            (benefit) => `
+              <div class="benefit-item">
+                <span class="benefit-icon" aria-hidden="true">${escapeHtml(benefit.icon)}</span>
+                <div>
+                  <strong>${escapeHtml(benefit.title)}</strong>
+                  <p>${escapeHtml(benefit.description)}</p>
+                </div>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function faqSection() {
+  return `
+    <section class="panel tight faq-panel">
+      <p class="eyebrow">❓ Помощь</p>
+      <h2 class="title">Частые вопросы</h2>
+      <div class="faq-list">
+        ${state.faqs
+          .map(
+            (item) => `
+              <details class="faq-item">
+                <summary>${escapeHtml(item.question)}</summary>
+                <p>${escapeHtml(item.answer)}</p>
+              </details>
+            `,
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
 function planCard(plan) {
   const daily = Math.max(1, Math.round(plan.priceRub / plan.days));
   const deviceLimit = plan.deviceLimit || state.me?.deviceLimit || 5;
   return `
-    <article class="plan-card">
+    <article class="plan-card ${plan.featured ? "featured" : ""}">
+      <span class="plan-label">${escapeHtml(plan.marketingLabel)}</span>
       <div class="row-head">
         <div>
           <p class="eyebrow">${escapeHtml(plan.badge)}</p>
@@ -533,9 +585,11 @@ function plansView() {
           <button class="text-link" data-link="/privacy">Политику конфиденциальности</button>.
         </p>
       </section>
+      ${benefitsSection()}
       <div class="plan-grid">
         ${state.plans.map(planCard).join("")}
       </div>
+      ${faqSection()}
     </main>
   `;
 }
@@ -546,30 +600,73 @@ function supportView() {
     <main class="view">
       <section class="panel">
         <p class="eyebrow">💬 Поддержка</p>
-        <h2 class="title">Напишите, что случилось</h2>
-        <p class="subtitle">Опишите проблему и укажите устройство, тип сети и текст ошибки. Поддержка ответит вам в Telegram.</p>
+        <h2 class="title">Создать обращение</h2>
+        <p class="subtitle">Выберите тему и добавьте детали. Ответ появится в этой переписке и придёт вам в Telegram.</p>
+        <div class="field">
+          <label for="supportTopic">Тема обращения</label>
+          <select id="supportTopic">
+            ${state.supportTopics
+              .map(
+                (topic) => `
+                  <option value="${escapeHtml(topic.code)}">${escapeHtml(topic.icon)} ${escapeHtml(topic.title)}</option>
+                `,
+              )
+              .join("")}
+          </select>
+        </div>
         <div class="field">
           <label for="supportText">Сообщение</label>
-          <textarea id="supportText" placeholder="Например: на Wi-Fi не подключается, Happ пишет timeout"></textarea>
+          <textarea id="supportText" placeholder="Укажите устройство, сеть и точный текст ошибки или вопроса"></textarea>
         </div>
         <button class="btn primary" data-support-send>📨 Отправить</button>
       </section>
+      ${faqSection()}
       <div class="section-title"><h2>💬 Мои обращения</h2></div>
-      <div class="list">
+      <div class="ticket-list">
         ${
           tickets.length
             ? tickets
                 .map(
                   (ticket) => `
-                    <div class="row">
-                      <div class="row-head">
-                        <div>
-                          <div class="row-title">Обращение #${ticket.id}</div>
-                          <div class="row-meta">${formatDate(ticket.created_at)}</div>
-                        </div>
+                    <details class="ticket-thread" ${ticket.status === "OPEN" ? "open" : ""}>
+                      <summary>
+                        <span>
+                          <strong>${escapeHtml(ticket.subject || `Обращение #${ticket.id}`)}</strong>
+                          <small>#${ticket.id} · ${formatDate(ticket.updated_at)}</small>
+                        </span>
                         <span class="badge ${ticket.status === "OPEN" ? "warn" : "ok"}">${ticket.status === "OPEN" ? "открыто" : "закрыто"}</span>
+                      </summary>
+                      <div class="ticket-thread-body">
+                        <div class="message-stack">
+                          ${(ticket.messages || [])
+                            .map(
+                              (message) => `
+                                <div class="message-bubble ${message.sender_role === "ADMIN" ? "admin-message" : "user-message"}">
+                                  <strong>${message.sender_role === "ADMIN" ? "Поддержка" : "Вы"}</strong>
+                                  <span>${escapeHtml(message.text)}</span>
+                                </div>
+                              `,
+                            )
+                            .join("")}
+                        </div>
+                        ${
+                          ticket.status === "OPEN"
+                            ? `
+                              <div class="reply-box">
+                                <div class="field">
+                                  <label for="userTicketReply${ticket.id}">Продолжить переписку</label>
+                                  <textarea id="userTicketReply${ticket.id}" placeholder="Напишите дополнительную информацию"></textarea>
+                                </div>
+                                <div class="actions compact-actions">
+                                  <button class="btn primary" data-user-reply-ticket="${ticket.id}">↩️ Ответить</button>
+                                  <button class="btn ghost" data-user-close-ticket="${ticket.id}">✅ Вопрос решён</button>
+                                </div>
+                              </div>
+                            `
+                            : ""
+                        }
                       </div>
-                    </div>
+                    </details>
                   `,
                 )
                 .join("")
@@ -690,7 +787,7 @@ function adminView() {
                     <div class="row">
                       <div class="row-head">
                         <div>
-                          <div class="row-title">Обращение #${ticket.id}</div>
+                          <div class="row-title">${escapeHtml(ticket.subject || `Обращение #${ticket.id}`)}</div>
                           <div class="row-meta">${escapeHtml(ticket.first_name || ticket.username || `TG ${ticket.tg_id}`)} · ${formatDate(ticket.updated_at)}</div>
                         </div>
                         <span class="badge warn">открыто</span>
@@ -863,6 +960,7 @@ async function handleClick(event) {
       setToast("Платёж отправлен на проверку");
     } else if (target.dataset.supportSend !== undefined) {
       const textarea = document.querySelector("#supportText");
+      const topic = document.querySelector("#supportTopic");
       const text = textarea?.value.trim();
       if (!text) {
         setToast("Напишите сообщение");
@@ -870,10 +968,33 @@ async function handleClick(event) {
       }
       await api("/api/support", {
         method: "POST",
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          topicCode: topic?.value || "other",
+        }),
       });
       await refresh();
       setToast("Обращение создано");
+    } else if (target.dataset.userReplyTicket) {
+      const ticketId = target.dataset.userReplyTicket;
+      const textarea = document.querySelector(`#userTicketReply${ticketId}`);
+      const text = textarea?.value.trim();
+      if (!text) {
+        setToast("Напишите сообщение");
+        return;
+      }
+      await api(`/api/support/${ticketId}/reply`, {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      });
+      await refresh();
+      setToast("Ответ добавлен");
+    } else if (target.dataset.userCloseTicket) {
+      await api(`/api/support/${target.dataset.userCloseTicket}/close`, {
+        method: "POST",
+      });
+      await refresh();
+      setToast("Обращение закрыто");
     } else if (target.dataset.adminRefresh !== undefined) {
       await loadAdmin();
       render();
